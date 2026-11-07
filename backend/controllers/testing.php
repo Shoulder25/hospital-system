@@ -80,7 +80,7 @@ function testingOrderRows(
             . implode(', ', $typePlaceholders) . ')';
     }
 
-    $statusFilter = '';
+    $statusFilter = ' AND t.status <> \'cancelled\'';
     if ($status !== '') {
         $allowedStatuses = ['ordered', 'in_progress', 'completed', 'cancelled'];
         if (!in_array($status, $allowedStatuses, true)) {
@@ -130,7 +130,7 @@ function testingOrderRows(
             ON routed.user_id = t.testing_desk_routed_by_user_id
          LEFT JOIN test_results tr ON tr.test_order_id = t.test_order_id
          LEFT JOIN users recorder ON recorder.user_id = tr.recorded_by_user_id
-         WHERE t.status <> \'cancelled\''
+         WHERE 1 = 1'
             . $departmentFilter . $statusFilter . $searchFilter .
         ' ORDER BY
             CASE t.status

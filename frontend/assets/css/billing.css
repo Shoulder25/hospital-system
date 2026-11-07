@@ -19,6 +19,17 @@
 .billing-payment-form select { width: 100%; min-width: 115px; min-height: 34px; border: 1px solid #dbe5e6; border-radius: 6px; padding: 0 7px; background: #fff; color: #30494f; font: inherit; font-size: 10px; }
 .billing-payment-form .button { white-space: nowrap; }
 .billing-payment-form .button:disabled { cursor: wait; opacity: .6; }
+.billing-visit-panel[hidden] { display: none; }
+.billing-visit-panel { display: grid; gap: 16px; }
+.billing-visit-panel .admin-panel-heading { align-items: flex-start; }
+.billing-visit-panel h2 { margin: 2px 0 5px; }
+.billing-visit-panel .admin-panel-heading p:last-child { margin: 0; color: #647a83; }
+.billing-visit-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; margin: 0; }
+.billing-visit-details dt { margin-bottom: 4px; color: #7c8d92; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.billing-visit-details dd { margin: 0; color: #30494f; font-size: 13px; font-weight: 600; }
+.billing-visit-payment { align-items: end; flex-wrap: wrap; }
+.billing-visit-payment label { flex: 0 0 100%; color: #536a71; font-size: 11px; font-weight: 700; }
+.billing-visit-payment select { max-width: 280px; min-height: 37px; border: 1px solid #dbe5e6; border-radius: 6px; padding: 0 9px; background: #fff; color: #30494f; font: inherit; }
 .billing-note, .receipt-footnote { margin: 0; color: #7d8e92; font-size: 11px; line-height: 1.6; }
 .receipt-card { max-width: 900px; margin: 8px auto; padding: 28px; }
 .receipt-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; padding-bottom: 18px; border-bottom: 1px solid #e8eef0; }
@@ -40,6 +51,7 @@
     .billing-search { min-width: 0; }
     .receipt-card { padding: 19px; }
     .receipt-details { grid-template-columns: 1fr; gap: 12px; }
+    .billing-visit-details { grid-template-columns: 1fr; }
 }
 
 @media print {
@@ -48,4 +60,5 @@
     .admin-page .dashboard-main { width: 100%; margin: 0; }
     .billing-content { display: block; padding: 0; }
     .receipt-card { max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; }
+    .billing-visit-panel { display: none !important; }
 }

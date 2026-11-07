@@ -253,7 +253,7 @@ function billingAddMedicationItemOnce(
     ];
 }
 
-function billingRefreshBillTotal(PDO $database, int $billId): string
+function billingCalculateBillTotal(PDO $database, int $billId): string
 {
     $totalStatement = $database->prepare(
         'SELECT COALESCE(SUM(quantity * unit_amount), 0.00)
@@ -261,13 +261,33 @@ function billingRefreshBillTotal(PDO $database, int $billId): string
          WHERE bill_id = :bill_id'
     );
     $totalStatement->execute(['bill_id' => $billId]);
-    $totalAmount = (string) $totalStatement->fetchColumn();
+    return (string) $totalStatement->fetchColumn();
+}
 
+function billingRefreshBillTotal(PDO $database, int $billId): string
+{
+    $totalAmount = billingCalculateBillTotal($database, $billId);
+    $balance = billingGetBillBalance($database, $billId);
+    $status = (float) $balance['billed_amount'] <= 0
+        ? null
+        : ((float) $balance['balance'] <= 0
+            ? 'paid'
+            : ((float) $balance['approved_amount'] > 0
+                ? 'partially_paid'
+                : 'pending'));
     $update = $database->prepare(
-        'UPDATE bills SET total_amount = :total_amount WHERE bill_id = :bill_id'
+        'UPDATE bills
+         SET total_amount = :total_amount,
+             status = CASE
+             WHEN status = \'cancelled\' OR :keep_status = 1 THEN status
+             ELSE :new_status
+             END
+         WHERE bill_id = :bill_id'
     );
     $update->execute([
         'total_amount' => $totalAmount,
+        'keep_status' => $status === null ? 1 : 0,
+        'new_status' => $status,
         'bill_id' => $billId,
     ]);
 
@@ -310,4 +330,14 @@ function billingGetBillBalance(PDO $database, int $billId): array
         'approved_amount' => (string) $balance['approved_amount'],
         'balance' => (string) $balance['balance'],
     ];
+}
+
+function billingGetApprovedPayments(PDO $database, int $billId): string
+{
+    return billingGetBillBalance($database, $billId)['approved_amount'];
+}
+
+function billingGetOutstandingBalance(PDO $database, int $billId): string
+{
+    return billingGetBillBalance($database, $billId)['balance'];
 }

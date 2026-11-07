@@ -31,7 +31,7 @@
                 <a class="side-link" href="specialists/index.php" hidden data-module-link data-roles="resident_specialist,locum_specialist,system_administrator"><span aria-hidden="true">＋</span> Specialists</a>
                 <a class="side-link" href="therapy/index.php" hidden data-module-link data-roles="therapist,system_administrator"><span aria-hidden="true">＋</span> Therapy</a>
                 <a class="side-link" href="pharmacy/index.php" hidden data-module-link data-roles="pharmacist,system_administrator"><span aria-hidden="true">＋</span> Pharmacy</a>
-                <a class="side-link admin-only" href="../auth/signup.php" hidden><span aria-hidden="true">＋</span> Staff accounts</a>
+                <a class="side-link admin-only" href="admin/users.php" hidden><span aria-hidden="true">＋</span> Staff accounts</a>
             </nav>
             <div class="sidebar-bottom">
                 <div class="sidebar-help">

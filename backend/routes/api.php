@@ -17,6 +17,7 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/admin/audit-log' => ['GET'],
         '/api/admin/reports' => ['GET'],
         '/api/visits/status' => ['GET'],
+        '/api/billing/ticket-queue' => ['GET'],
         '/api/reception/dashboard' => ['GET'],
         '/api/reception/organizations' => ['GET'],
         '/api/reception/patients' => ['GET', 'POST'],
@@ -51,6 +52,7 @@ function dispatchApiRequest(string $method, string $path): void
     $testingOrderId = null;
     $testingAction = null;
     $billingVisitId = null;
+    $billingVisitAction = null;
     $billingPaymentId = null;
     $specialistReferralId = null;
     $specialistReferralAction = null;
@@ -108,12 +110,15 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = ['POST'];
     }
     if (preg_match(
-        '#^/api/billing/visits/([0-9]+)/ticket-payment$#',
+        '#^/api/billing/visits/([0-9]+)(?:/(ticket-payment))?$#',
         $path,
         $matches
     )) {
         $billingVisitId = $matches[1];
-        $routes[$path] = ['POST'];
+        $billingVisitAction = $matches[2] ?? '';
+        $routes[$path] = $billingVisitAction === ''
+            ? ['GET']
+            : ['POST'];
     }
     if (preg_match(
         '#^/api/billing/payments/([0-9]+)/receipt$#',
@@ -290,7 +295,11 @@ function dispatchApiRequest(string $method, string $path): void
         } elseif ($testingOrderId !== null && $testingAction === 'start') {
             handleTestingOrderStart($testingDepartment, $testingOrderId);
         } elseif ($billingVisitId !== null) {
-            handleBillingTicketPaymentCreate($billingVisitId);
+            if ($billingVisitAction === 'ticket-payment') {
+                handleBillingTicketPaymentCreate($billingVisitId);
+            } else {
+                handleBillingVisitGet($billingVisitId);
+            }
         } elseif ($billingPaymentId !== null) {
             handleBillingReceiptGet($billingPaymentId);
         } elseif ($specialistReferralId !== null) {
@@ -331,7 +340,11 @@ function dispatchApiRequest(string $method, string $path): void
                 ], 422);
             }
             handlePharmacyQueueGet($search);
-        } elseif ($path === '/api/billing/queue') {
+        } elseif (in_array(
+            $path,
+            ['/api/billing/queue', '/api/billing/ticket-queue'],
+            true
+        )) {
             $search = $_GET['search'] ?? '';
             if (!is_string($search)) {
                 jsonError('Search text must be a string.', [

@@ -60,10 +60,34 @@ $initial = $initialMatch[0] ?? 'C';
                     </div>
                     <div class="billing-table-wrap">
                         <table class="admin-table billing-table">
-                            <thead><tr><th scope="col">Patient</th><th scope="col">Visit</th><th scope="col">Source</th><th scope="col">Organization</th><th scope="col">Arrived</th><th scope="col">Ticket fee</th><th scope="col">Payment</th></tr></thead>
+                            <thead><tr><th scope="col">Patient</th><th scope="col">Visit</th><th scope="col">Source</th><th scope="col">Organization</th><th scope="col">Arrived</th><th scope="col">Ticket fee</th><th scope="col">Action</th></tr></thead>
                             <tbody data-billing-rows><tr><td class="table-message" colspan="7">Loading ticket-payment queue…</td></tr></tbody>
                         </table>
                     </div>
+                </section>
+                <section class="admin-panel billing-visit-panel" data-billing-visit hidden aria-labelledby="billing-visit-heading">
+                    <div class="admin-panel-heading">
+                        <div><p class="eyebrow">VISIT DETAILS</p><h2 id="billing-visit-heading">Ticket payment</h2><p data-billing-visit-summary></p></div>
+                        <button class="button button-outline button-small" type="button" data-close-visit>Close</button>
+                    </div>
+                    <dl class="billing-visit-details">
+                        <div><dt>Patient number</dt><dd data-visit-patient-number></dd></div>
+                        <div><dt>Visit source</dt><dd data-visit-source></dd></div>
+                        <div><dt>Source organization</dt><dd data-visit-organization></dd></div>
+                        <div><dt>Arrived</dt><dd data-visit-arrived></dd></div>
+                        <div><dt>Current status</dt><dd data-visit-status></dd></div>
+                        <div><dt>Ticket fee</dt><dd data-ticket-fee></dd></div>
+                    </dl>
+                    <form class="billing-payment-form billing-visit-payment" data-ticket-payment-form>
+                        <label for="ticket-payment-method">Payment method</label>
+                        <select id="ticket-payment-method" name="payment_method" required>
+                            <option value="cash">Cash</option>
+                            <option value="card">Card (simulated)</option>
+                            <option value="medical_aid">Medical aid (simulated)</option>
+                        </select>
+                        <button class="button button-primary" type="submit" data-ticket-payment-submit>Take payment</button>
+                    </form>
+                    <p class="billing-note">Card and medical-aid approvals are simulated for this academic prototype.</p>
                 </section>
                 <p class="billing-note">Card and medical-aid approvals are simulated for this academic prototype. Successful payments create a receipt and move the visit to Nursing.</p>
             </section>

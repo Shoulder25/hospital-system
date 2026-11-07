@@ -134,6 +134,81 @@ function handleBillingQueueGet(string $search): void
     ]);
 }
 
+function handleBillingVisitGet(string $visitId): void
+{
+    if (!ctype_digit($visitId) || (int) $visitId < 1) {
+        jsonError('A valid visit ID is required.', [
+            'visit_id' => 'Enter a positive visit ID.',
+        ], 422);
+    }
+
+    $database = getDatabaseConnection();
+    $user = requireBillingAccess($database);
+    $statement = $database->prepare(
+        'SELECT visit.visit_id, visit.patient_id, visit.arrived_at,
+                visit.visit_source, visit.source_organization_id, visit.status,
+                visit.is_emergency, visit.medication_collection_only,
+                organization.name AS source_organization,
+                patient.patient_number, patient.first_name, patient.last_name
+         FROM visits visit
+         INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+         LEFT JOIN organizations organization
+            ON organization.organization_id = visit.source_organization_id
+         WHERE visit.visit_id = :visit_id
+         LIMIT 1'
+    );
+    $statement->execute(['visit_id' => (int) $visitId]);
+    $row = $statement->fetch();
+    if ($row === false) {
+        jsonError('Visit not found.', [], 404);
+    }
+    if ((bool) $row['is_emergency']
+        || (bool) $row['medication_collection_only']
+        || $row['status'] !== 'awaiting_ticket_payment') {
+        jsonError('This visit is not eligible for ticket payment.', [], 409);
+    }
+
+    $feeStatement = $database->prepare(
+        'SELECT fee_code, description, default_amount, is_demo
+         FROM fee_catalog
+         WHERE fee_code = :fee_code AND is_active = 1
+         LIMIT 1'
+    );
+    $feeStatement->execute(['fee_code' => 'TICKET_DEMO']);
+    $ticketFee = $feeStatement->fetch();
+    if ($ticketFee === false || (float) $ticketFee['default_amount'] <= 0) {
+        jsonError('The active ticket fee is not configured.', [], 503);
+    }
+
+    recordBillingAudit(
+        $database,
+        (int) $user['user_id'],
+        'billing.visit.viewed',
+        (int) $row['patient_id'],
+        (int) $row['visit_id']
+    );
+
+    jsonSuccess('Ticket-payment visit loaded.', [
+        'visit' => [
+            'visit_id' => (int) $row['visit_id'],
+            'patient_number' => $row['patient_number'],
+            'patient_name' => trim(
+                (string) $row['first_name'] . ' ' . (string) $row['last_name']
+            ),
+            'arrived_at' => $row['arrived_at'],
+            'visit_source' => $row['visit_source'],
+            'source_organization' => $row['source_organization'],
+            'status' => $row['status'],
+        ],
+        'ticket_fee' => [
+            'fee_code' => $ticketFee['fee_code'],
+            'description' => $ticketFee['description'],
+            'amount' => (string) $ticketFee['default_amount'],
+            'is_demo' => (bool) $ticketFee['is_demo'],
+        ],
+    ]);
+}
+
 function handleBillingTicketPaymentCreate(string $visitId): void
 {
     if (!ctype_digit($visitId) || (int) $visitId < 1) {
@@ -185,6 +260,20 @@ function handleBillingTicketPaymentCreate(string $visitId): void
             jsonError('This visit is not awaiting ticket payment.', [], 409);
         }
 
+        $feeStatement = $database->prepare(
+            'SELECT default_amount
+             FROM fee_catalog
+             WHERE fee_code = :fee_code AND is_active = 1
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $feeStatement->execute(['fee_code' => 'TICKET_DEMO']);
+        $ticketFee = $feeStatement->fetch();
+        if ($ticketFee === false || (float) $ticketFee['default_amount'] <= 0) {
+            $database->rollBack();
+            jsonError('The active ticket fee is not configured.', [], 503);
+        }
+
         $bill = billingGetOrCreateBill($database, (int) $visit['visit_id']);
         if ($bill['status'] === 'cancelled' || $bill['status'] === 'paid') {
             $database->rollBack();
@@ -232,10 +321,17 @@ function handleBillingTicketPaymentCreate(string $visitId): void
         ]);
         $paymentId = (int) $database->lastInsertId();
 
+        $balance = billingGetBillBalance($database, (int) $bill['bill_id']);
+        $billStatus = (float) $balance['balance'] <= 0
+            ? 'paid'
+            : 'partially_paid';
         $billUpdate = $database->prepare(
-            'UPDATE bills SET status = \'partially_paid\' WHERE bill_id = :bill_id'
+            'UPDATE bills SET status = :status WHERE bill_id = :bill_id'
         );
-        $billUpdate->execute(['bill_id' => (int) $bill['bill_id']]);
+        $billUpdate->execute([
+            'status' => $billStatus,
+            'bill_id' => (int) $bill['bill_id'],
+        ]);
 
         $visitUpdate = $database->prepare(
             'UPDATE visits
@@ -274,7 +370,9 @@ function handleBillingTicketPaymentCreate(string $visitId): void
         'payment_method' => $paymentMethod,
         'is_simulated' => $paymentMethod !== 'cash',
         'payment_status' => 'approved',
-        'bill_status' => 'partially_paid',
+        'bill_status' => $billStatus,
+        'approved_payments' => $balance['approved_amount'],
+        'balance' => $balance['balance'],
         'visit_id' => (int) $visitId,
         'visit_status' => 'awaiting_nurse',
     ], 201);

@@ -3,7 +3,7 @@
 (() => {
     const projectBase = document.body.dataset.basePath || '';
     const apiEntry = new URL(`${projectBase}/backend/index.php`, window.location.origin);
-    const state = { csrfToken: '' };
+    const state = { csrfToken: '', activeVisit: null };
     const messageElement = document.querySelector('[data-billing-message]');
 
     async function request(route, options = {}) {
@@ -117,7 +117,7 @@
     async function loadQueue(search = '') {
         emptyQueue('Loading ticket-payment queue…');
         try {
-            const data = await parseRequest('/api/billing/queue', {
+            const data = await parseRequest('/api/billing/ticket-queue', {
                 query: search ? { search } : {},
             });
             const body = document.querySelector('[data-billing-rows]');
@@ -140,36 +140,48 @@
                 appendCell(row, dateTime(visit.arrived_at));
                 appendCell(row, visit.ticket_amount);
 
-                const paymentCell = document.createElement('td');
-                const form = document.createElement('form');
-                form.className = 'billing-payment-form';
-                const method = document.createElement('select');
-                method.setAttribute('aria-label', `Payment method for visit ${visit.visit_id}`);
-                [
-                    ['cash', 'Cash'],
-                    ['card', 'Card (simulated)'],
-                    ['medical_aid', 'Medical aid (simulated)'],
-                ].forEach(([value, label]) => {
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = label;
-                    method.appendChild(option);
-                });
-                const submit = document.createElement('button');
-                submit.type = 'submit';
-                submit.className = 'button button-primary button-small';
-                submit.textContent = 'Take payment';
-                form.append(method, submit);
-                form.addEventListener('submit', (event) => {
-                    event.preventDefault();
-                    recordPayment(visit, method.value, submit);
-                });
-                paymentCell.appendChild(form);
-                row.appendChild(paymentCell);
+                const actionCell = document.createElement('td');
+                const open = document.createElement('button');
+                open.type = 'button';
+                open.className = 'button button-outline button-small';
+                open.textContent = 'Open visit';
+                open.addEventListener('click', () => openVisit(visit.visit_id));
+                actionCell.appendChild(open);
+                row.appendChild(actionCell);
                 body.appendChild(row);
             });
         } catch (error) {
             emptyQueue('Unable to load the ticket-payment queue.');
+            showMessage(error.message);
+        }
+    }
+
+    async function openVisit(visitId) {
+        try {
+            const data = await parseRequest(
+                `/api/billing/visits/${encodeURIComponent(visitId)}`
+            );
+            state.activeVisit = data.visit;
+            document.querySelector('[data-billing-visit-summary]').textContent =
+                `${data.visit.patient_name || 'Temporary patient'} · Visit #${data.visit.visit_id}`;
+            document.querySelector('[data-visit-patient-number]').textContent =
+                data.visit.patient_number || 'No patient number';
+            document.querySelector('[data-visit-source]').textContent =
+                pretty(data.visit.visit_source);
+            document.querySelector('[data-visit-organization]').textContent =
+                data.visit.source_organization || '—';
+            document.querySelector('[data-visit-arrived]').textContent =
+                dateTime(data.visit.arrived_at);
+            document.querySelector('[data-visit-status]').textContent =
+                pretty(data.visit.status);
+            document.querySelector('[data-ticket-fee]').textContent =
+                `${data.ticket_fee.amount}${data.ticket_fee.is_demo ? ' (demo)' : ''}`;
+            document.querySelector('[data-billing-visit]').hidden = false;
+            document.querySelector('[data-billing-visit]').scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            });
+        } catch (error) {
             showMessage(error.message);
         }
     }
@@ -197,6 +209,8 @@
             receipt.href = `receipt.php?payment_id=${encodeURIComponent(data.payment_id)}`;
             receipt.textContent = `Print receipt ${data.receipt_number}`;
             messageElement.appendChild(receipt);
+            document.querySelector('[data-billing-visit]').hidden = true;
+            state.activeVisit = null;
             await loadQueue(document.querySelector('#billing-search').value.trim());
         } catch (error) {
             showMessage(error.message);
@@ -268,6 +282,24 @@
                 await loadReceipt();
                 return;
             }
+            document.querySelector('[data-ticket-payment-form]').addEventListener(
+                'submit',
+                (event) => {
+                    event.preventDefault();
+                    if (!state.activeVisit) return;
+                    const form = event.currentTarget;
+                    const button = form.querySelector('[data-ticket-payment-submit]');
+                    recordPayment(
+                        state.activeVisit,
+                        new FormData(form).get('payment_method'),
+                        button
+                    );
+                }
+            );
+            document.querySelector('[data-close-visit]').addEventListener('click', () => {
+                document.querySelector('[data-billing-visit]').hidden = true;
+                state.activeVisit = null;
+            });
             document.querySelector('[data-search-button]').addEventListener('click', () => {
                 loadQueue(document.querySelector('#billing-search').value.trim());
             });

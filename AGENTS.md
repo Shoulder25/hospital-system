@@ -16,7 +16,20 @@ It supports the patient journey: arrival/registration → assessment → tests �
 - A feature is "done" when it works in the browser/Postman for the normal path and the main error cases. Do not gold-plate.
 - Do not claim production readiness or regulatory compliance. Mention "academic prototype" in docs.
 
-Do not assume functionality exists until it has been implemented and tested. The repo is a scaffold.
+Do not assume functionality exists until it has been implemented and tested. This
+repository began as a scaffold; use the current-state note below for what is
+present and what has actually been verified.
+
+### Current implementation and verification state (2026-11-07)
+
+The codebase contains page/API modules for administration, reception, billing,
+nursing, general doctor, testing desk, laboratory, radiology, cardiac,
+specialist referral, therapy, pharmacy, visit status, audit viewing and reports.
+This does not mean every workflow has passed an end-to-end browser test. The
+current local database has no demo accounts for several departments, and the
+emergency department has no working page/controller/API workflow. Do not claim
+that all modules or nine patient scenarios have been fully tested. See
+`docs/DEMO.md` for the step-by-step script and validation status.
 
 ## 2. Source-of-truth documents (in `docs/source/`)
 
@@ -26,9 +39,12 @@ Read these before implementing or changing any workflow:
 |---|---|
 | `Person1_Requirements_and_Stakeholder_Analysis.docx` | Stakeholders, process steps, decisions D1–D8, business rules BR1–BR12, functional requirements FR-01 to FR-46 |
 | `Person2_Process_Modelling_and_DFD.docx` | DFD Level 0/1 (7 processes, 4 data stores D1–D4) and UML class diagram |
+| `Person3_System_Design_and_Architecture.docx` | System architecture and proposed API endpoint paths |
 | `Team_Patient_Flowchart.jpeg` | Team's patient-processing flowchart |
 
-Person 3's API specification is **not yet available**. Mark all endpoints as **provisional** in docs until it is supplied, then reconcile names/payloads.
+Person 3's endpoint list is proposed, not final. Keep endpoint documentation
+provisional and use `docs/API_MAPPING.md` to track current paths and gaps until
+the team confirms the final specification.
 
 **Precedence when sources disagree:** Person 1 requirements + flowchart win over the UML class diagram. If still unclear, ask the user; do not invent business rules.
 
