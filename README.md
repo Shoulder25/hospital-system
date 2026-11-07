@@ -5,7 +5,7 @@ Academic prototype for the CSC411 mini-project (functional-first, light security
 ## Start here
 1. Open this folder in VS Code.
 2. Read `AGENTS.md` before asking the coding agent to implement anything.
-3. Put the project at `C:\xampp\htdocs\hospital-system`.
+3. Put the project in your XAMPP web root (for example, `C:\xampp\htdocs\<your-project>`).
 4. Start Apache and MySQL in XAMPP.
 5. Follow the setup and demo instructions in [`docs/DEMO.md`](./docs/DEMO.md).
 

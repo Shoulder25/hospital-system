@@ -10,19 +10,18 @@ are required.
 1. Import `database/hosp.sql` into MySQL if it has not already been imported.
 2. Start Apache and MySQL in the XAMPP Control Panel.
 3. Configure the environment variables available to Apache:
-   - `HOSPITAL_DB_USER` (optional; XAMPP local default is `root`)
-   - `HOSPITAL_DB_PASSWORD` (optional; XAMPP local default is empty, only
-     because this project's local XAMPP MariaDB was verified with that setting)
+   - `HOSPITAL_DB_NAME` (required for the project database)
+   - `HOSPITAL_DB_USER` (required for the MySQL account used by the app)
+   - `HOSPITAL_DB_PASSWORD` (required if your MySQL account has a password)
    - `HOSPITAL_DB_HOST` (optional; defaults to `127.0.0.1`)
    - `HOSPITAL_DB_PORT` (optional; defaults to `3306`)
-4. The local fallback is for XAMPP development only. If your MySQL account
-   uses a password or a non-root username, set both environment variables
-   for Apache. Restart Apache after changing its environment. Do not put database
-   credentials in the repository or a public web file.
+4. Keep database credentials out of the repository and any public web file.
+   Restart Apache after changing environment variables.
 5. Public registration is disabled in the application configuration. Existing
    accounts and role assignments are unchanged. Administrators create staff
    accounts through the protected management module.
-6. Open `http://localhost/hospital-system/auth/login.php` to sign in.
+6. Open the login page from your local project URL (for example, the site root
+   with `/auth/login.php` appended) to sign in.
 
 The API entry point does not depend on Apache URL rewriting. It uses
 `backend/index.php?route=...`.
