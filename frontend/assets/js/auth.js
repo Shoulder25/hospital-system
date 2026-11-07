@@ -266,6 +266,7 @@
             return 'frontend/specialists/index.php';
         }
         if (role === 'therapist') return 'frontend/therapy/index.php';
+        if (role === 'pharmacist') return 'frontend/pharmacy/index.php';
         return 'frontend/dashboard.php';
     }
 

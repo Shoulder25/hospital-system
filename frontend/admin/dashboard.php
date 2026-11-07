@@ -57,6 +57,7 @@ $escape = static function ($value): string {
             <nav class="side-nav" aria-label="Administration navigation">
                 <a class="side-link active" href="dashboard.php"><span aria-hidden="true">⌂</span> Overview</a>
                 <a class="side-link" href="users.php"><span aria-hidden="true">♙</span> Staff accounts</a>
+                <a class="side-link" href="../visit-status.php"><span aria-hidden="true">◷</span> Visit status</a>
                 <a class="side-link" href="../reception/index.php"><span aria-hidden="true">⌕</span> Reception desk</a>
                 <a class="side-link" href="../nursing/index.php"><span aria-hidden="true">＋</span> Nursing</a>
                 <a class="side-link" href="../doctor/index.php"><span aria-hidden="true">＋</span> General doctor</a>
@@ -67,6 +68,7 @@ $escape = static function ($value): string {
                 <a class="side-link" href="../billing/index.php"><span aria-hidden="true">$</span> Cashier / Billing</a>
                 <a class="side-link" href="../specialists/index.php"><span aria-hidden="true">＋</span> Specialists</a>
                 <a class="side-link" href="../therapy/index.php"><span aria-hidden="true">＋</span> Therapy</a>
+                <a class="side-link" href="../pharmacy/index.php"><span aria-hidden="true">＋</span> Pharmacy</a>
             </nav>
             <div class="sidebar-bottom">
                 <div class="sidebar-help">
@@ -168,6 +170,96 @@ $escape = static function ($value): string {
                             </table>
                         </div>
                     <?php endif; ?>
+                </section>
+
+                <section class="admin-panel monitoring-panel" aria-labelledby="audit-heading">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <h2 id="audit-heading">Audit log</h2>
+                            <p>Read-only record of staff activity. Results are limited to the latest 500 matches.</p>
+                        </div>
+                    </div>
+                    <form class="monitoring-filters" data-audit-filters>
+                        <label>User
+                            <input name="user" type="search" maxlength="100" placeholder="Name, username or ID">
+                        </label>
+                        <label>Patient
+                            <input name="patient" type="search" maxlength="100" placeholder="Patient number, name or ID">
+                        </label>
+                        <label>From
+                            <input name="from" type="date">
+                        </label>
+                        <label>To
+                            <input name="to" type="date">
+                        </label>
+                        <button class="button button-primary" type="submit">Filter log</button>
+                    </form>
+                    <div class="table-wrap">
+                        <table class="admin-table monitoring-table">
+                            <thead><tr>
+                                <th scope="col">Time</th>
+                                <th scope="col">User</th>
+                                <th scope="col">Action</th>
+                                <th scope="col">Patient</th>
+                                <th scope="col">Visit</th>
+                            </tr></thead>
+                            <tbody data-audit-rows>
+                                <tr><td class="table-message" colspan="5">Loading audit entries…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="admin-panel monitoring-panel reports-panel" aria-labelledby="reports-heading">
+                    <div class="admin-panel-heading">
+                        <div>
+                            <h2 id="reports-heading">Reports</h2>
+                            <p>Counts and approved-payment totals from existing hospital records.</p>
+                        </div>
+                    </div>
+                    <form class="monitoring-filters" data-report-filters>
+                        <label>From
+                            <input name="from" type="date">
+                        </label>
+                        <label>To
+                            <input name="to" type="date">
+                        </label>
+                        <button class="button button-primary" type="submit">Refresh reports</button>
+                    </form>
+                    <div class="report-summary">
+                        <article><span>Specialist referrals</span><strong data-specialist-referral-count>—</strong></article>
+                        <article><span>Outside referrals</span><strong data-outside-referral-count>—</strong></article>
+                    </div>
+                    <div class="report-grid">
+                        <section aria-labelledby="patients-report-heading">
+                            <h3 id="patients-report-heading">Patients per day</h3>
+                            <div class="table-wrap"><table class="admin-table monitoring-table">
+                                <thead><tr><th scope="col">Date</th><th scope="col">Patients</th></tr></thead>
+                                <tbody data-report-patients><tr><td class="table-message" colspan="2">Loading…</td></tr></tbody>
+                            </table></div>
+                        </section>
+                        <section aria-labelledby="tests-report-heading">
+                            <h3 id="tests-report-heading">Tests by type</h3>
+                            <div class="table-wrap"><table class="admin-table monitoring-table">
+                                <thead><tr><th scope="col">Test type</th><th scope="col">Orders</th></tr></thead>
+                                <tbody data-report-tests><tr><td class="table-message" colspan="2">Loading…</td></tr></tbody>
+                            </table></div>
+                        </section>
+                        <section aria-labelledby="revenue-date-heading">
+                            <h3 id="revenue-date-heading">Approved revenue by date</h3>
+                            <div class="table-wrap"><table class="admin-table monitoring-table">
+                                <thead><tr><th scope="col">Date</th><th scope="col">Amount</th></tr></thead>
+                                <tbody data-report-revenue-date><tr><td class="table-message" colspan="2">Loading…</td></tr></tbody>
+                            </table></div>
+                        </section>
+                        <section aria-labelledby="revenue-method-heading">
+                            <h3 id="revenue-method-heading">Approved revenue by method</h3>
+                            <div class="table-wrap"><table class="admin-table monitoring-table">
+                                <thead><tr><th scope="col">Method</th><th scope="col">Amount</th></tr></thead>
+                                <tbody data-report-revenue-method><tr><td class="table-message" colspan="2">Loading…</td></tr></tbody>
+                            </table></div>
+                        </section>
+                    </div>
                 </section>
 
                 <p class="admin-footnote">Administration tools are for this academic prototype and its fictional demo data.</p>

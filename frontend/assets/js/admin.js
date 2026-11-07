@@ -97,6 +97,170 @@
         }).format(date);
     }
 
+    function formatDateTime(value) {
+        const date = new Date(value.replace(' ', 'T'));
+        if (Number.isNaN(date.getTime())) return value;
+        return new Intl.DateTimeFormat(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(date);
+    }
+
+    function renderRows(target, records, columns, emptyMessage) {
+        if (!target) return;
+        target.replaceChildren();
+        if (records.length === 0) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = columns.length;
+            cell.className = 'table-message';
+            cell.textContent = emptyMessage;
+            row.appendChild(cell);
+            target.appendChild(row);
+            return;
+        }
+        records.forEach((record) => {
+            const row = document.createElement('tr');
+            columns.forEach((column) => {
+                const value = column(record);
+                appendCell(row, value === null || value === undefined || value === '' ? '—' : String(value));
+            });
+            target.appendChild(row);
+        });
+    }
+
+    async function loadAuditLog(query = {}) {
+        const rows = document.querySelector('[data-audit-rows]');
+        if (!rows) return;
+        try {
+            const { response, payload } = await request('/api/admin/audit-log', { query });
+            if (response.status === 401) {
+                window.location.replace(`${projectBase}auth/login.php?message=session-expired`);
+                return;
+            }
+            if (response.status === 403) {
+                window.location.replace(`${projectBase}frontend/dashboard.php`);
+                return;
+            }
+            if (!response.ok || !payload.success) {
+                throw new Error(messageText(payload, 'Could not load the audit log.'));
+            }
+            renderRows(rows, payload.data.entries, [
+                (entry) => formatDateTime(entry.created_at),
+                (entry) => entry.user_name
+                    ? `${entry.user_name} (${entry.username || 'inactive account'})`
+                    : 'Unknown user',
+                (entry) => entry.action,
+                (entry) => entry.patient_number
+                    ? `${entry.patient_number}${entry.patient_name ? ` — ${entry.patient_name}` : ''}`
+                    : '—',
+                (entry) => entry.visit_id,
+            ], 'No audit entries match these filters.');
+        } catch (error) {
+            renderRows(rows, [], Array(5).fill(() => ''), error.message);
+        }
+    }
+
+    function localDateInput(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    async function loadReports(query = {}) {
+        const targets = {
+            patients: document.querySelector('[data-report-patients]'),
+            tests: document.querySelector('[data-report-tests]'),
+            revenueDate: document.querySelector('[data-report-revenue-date]'),
+            revenueMethod: document.querySelector('[data-report-revenue-method]'),
+        };
+        if (!targets.patients) return;
+        try {
+            const { response, payload } = await request('/api/admin/reports', { query });
+            if (response.status === 401) {
+                window.location.replace(`${projectBase}auth/login.php?message=session-expired`);
+                return;
+            }
+            if (response.status === 403) {
+                window.location.replace(`${projectBase}frontend/dashboard.php`);
+                return;
+            }
+            if (!response.ok || !payload.success) {
+                throw new Error(messageText(payload, 'Could not load reports.'));
+            }
+            const data = payload.data;
+            renderRows(targets.patients, data.patients_per_day, [
+                (row) => row.report_date,
+                (row) => row.patient_count,
+            ], 'No patient arrivals in this range.');
+            renderRows(targets.tests, data.tests_by_type, [
+                (row) => row.test_type.replaceAll('_', ' '),
+                (row) => row.order_count,
+            ], 'No test orders in this range.');
+            renderRows(targets.revenueDate, data.revenue_by_date, [
+                (row) => row.report_date,
+                (row) => row.revenue,
+            ], 'No approved payments in this range.');
+            renderRows(targets.revenueMethod, data.revenue_by_method, [
+                (row) => row.payment_method.replaceAll('_', ' '),
+                (row) => row.revenue,
+            ], 'No approved payments in this range.');
+            document.querySelector('[data-specialist-referral-count]').textContent =
+                String(data.specialist_referrals);
+            document.querySelector('[data-outside-referral-count]').textContent =
+                String(data.outside_referrals);
+        } catch (error) {
+            Object.values(targets).forEach((target) => {
+                renderRows(target, [], [() => '', () => ''], error.message);
+            });
+        }
+    }
+
+    function setupMonitoringFilters() {
+        const auditForm = document.querySelector('[data-audit-filters]');
+        if (auditForm) {
+            auditForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const values = new FormData(auditForm);
+                const query = {};
+                values.forEach((value, key) => {
+                    if (value) query[key] = value;
+                });
+                loadAuditLog(query);
+            });
+            loadAuditLog();
+        }
+
+        const reportForm = document.querySelector('[data-report-filters]');
+        if (reportForm) {
+            const to = reportForm.elements.namedItem('to');
+            const from = reportForm.elements.namedItem('from');
+            const today = new Date();
+            if (to && from) {
+                to.value = localDateInput(today);
+                const start = new Date(today);
+                start.setDate(start.getDate() - 29);
+                from.value = localDateInput(start);
+            }
+            reportForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const values = new FormData(reportForm);
+                loadReports({
+                    from: values.get('from'),
+                    to: values.get('to'),
+                });
+            });
+            loadReports({
+                from: from ? from.value : '',
+                to: to ? to.value : '',
+            });
+        }
+    }
+
     async function loadUsers(search = '') {
         const rows = document.querySelector('[data-user-rows]');
         if (!rows) return;
@@ -308,6 +472,9 @@
         try {
             const allowed = await requireAdminSession();
             if (!allowed) return;
+            if (document.body.dataset.page === 'admin-dashboard') {
+                setupMonitoringFilters();
+            }
             if (document.body.dataset.page === 'admin-users') {
                 await loadRoles();
                 setupSearch();

@@ -1,0 +1,489 @@
+'use strict';
+
+(() => {
+    const projectBase = document.body.dataset.basePath || '';
+    const apiEntry = new URL(`${projectBase}/backend/index.php`, window.location.origin);
+    const state = { csrfToken: '', visits: [], selectedVisitId: null, visit: null };
+    const messageElement = document.querySelector('[data-pharmacy-message]');
+
+    async function request(route, options = {}) {
+        const headers = new Headers(options.headers || {});
+        const url = new URL(apiEntry.href);
+        url.searchParams.set('route', route);
+        if (options.body && !headers.has('Content-Type')) {
+            headers.set('Content-Type', 'application/json');
+        }
+        if (state.csrfToken && options.method && options.method !== 'GET') {
+            headers.set('X-CSRF-Token', state.csrfToken);
+        }
+        const response = await fetch(url.href, {
+            ...options,
+            headers,
+            credentials: 'same-origin',
+            cache: 'no-store',
+        });
+        let payload;
+        try {
+            payload = await response.json();
+        } catch (error) {
+            throw new Error('The server returned an unreadable response.');
+        }
+        return { response, payload };
+    }
+
+    function errorMessage(payload, fallback) {
+        if (payload && payload.errors && typeof payload.errors === 'object') {
+            const first = Object.values(payload.errors).find((value) => typeof value === 'string');
+            if (first) return first;
+        }
+        return payload && typeof payload.message === 'string' ? payload.message : fallback;
+    }
+
+    function showMessage(message, type = 'error') {
+        messageElement.textContent = message;
+        messageElement.classList.toggle('error', type === 'error');
+        messageElement.classList.toggle('success', type === 'success');
+        messageElement.hidden = false;
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function parseRequest(route, options = {}) {
+        const { response, payload } = await request(route, options);
+        if (response.status === 401) {
+            window.location.replace(`${projectBase}/auth/login.php?message=session-expired`);
+            throw new Error('Your session has expired. Sign in again.');
+        }
+        if (!response.ok || !payload.success) {
+            const error = new Error(errorMessage(payload, 'The request could not be completed.'));
+            error.status = response.status;
+            throw error;
+        }
+        return payload.data;
+    }
+
+    async function verifySession() {
+        const data = await parseRequest('/api/auth/me');
+        if (!['pharmacist', 'system_administrator'].includes(data.user.role.name)) {
+            window.location.replace(`${projectBase}/frontend/dashboard.php`);
+            return false;
+        }
+        state.csrfToken = data.csrf_token;
+        return true;
+    }
+
+    function addText(parent, tagName, text, className = '') {
+        const element = document.createElement(tagName);
+        if (className) element.className = className;
+        element.textContent = text === null || text === '' ? '—' : String(text);
+        parent.appendChild(element);
+        return element;
+    }
+
+    function formattedDate(value) {
+        if (!value) return '—';
+        const date = new Date(String(value).replace(' ', 'T'));
+        if (Number.isNaN(date.getTime())) return String(value);
+        return new Intl.DateTimeFormat(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(date);
+    }
+
+    function money(value) {
+        const amount = Number(value);
+        return Number.isFinite(amount) ? amount.toFixed(2) : '0.00';
+    }
+
+    function renderQueue() {
+        const list = document.querySelector('[data-pharmacy-queue]');
+        list.replaceChildren();
+        if (state.visits.length === 0) {
+            addText(list, 'p', 'No visits are awaiting pharmacy service.', 'pharmacy-empty');
+            return;
+        }
+        state.visits.forEach((visit) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'pharmacy-visit-card';
+            button.classList.toggle('selected', visit.visit_id === state.selectedVisitId);
+            button.addEventListener('click', () => openVisit(visit.visit_id));
+            const patient = addText(
+                button,
+                'strong',
+                visit.patient_name || 'Temporary patient',
+                'pharmacy-card-patient'
+            );
+            patient.title = visit.patient_number || '';
+            addText(button, 'span', `Visit #${visit.visit_id} · ${visit.status.replaceAll('_', ' ')}`);
+            if (visit.is_emergency) addText(button, 'span', 'Emergency · deferred charges', 'pharmacy-card-tag');
+            if (visit.medication_collection_only) addText(button, 'span', 'Medication collection only', 'pharmacy-card-tag');
+            addText(button, 'small', formattedDate(visit.arrived_at));
+            list.appendChild(button);
+        });
+    }
+
+    async function loadQueue(search = '', preferredId = state.selectedVisitId) {
+        const list = document.querySelector('[data-pharmacy-queue]');
+        list.replaceChildren();
+        addText(list, 'p', 'Loading pharmacy queue…', 'pharmacy-empty');
+        try {
+            const data = await parseRequest(`/api/pharmacy/queue${search ? `?search=${encodeURIComponent(search)}` : ''}`);
+            state.visits = data.visits;
+            renderQueue();
+            if (preferredId && state.visits.some((visit) => visit.visit_id === preferredId)) {
+                await openVisit(preferredId, false);
+            } else if (preferredId) {
+                state.selectedVisitId = null;
+                state.visit = null;
+                document.querySelector('[data-visit-panel]').hidden = true;
+            }
+        } catch (error) {
+            list.replaceChildren();
+            addText(list, 'p', 'Unable to load pharmacy queue.', 'pharmacy-empty');
+            showMessage(error.message);
+        }
+    }
+
+    function renderPrescriptions(prescriptions) {
+        const container = document.querySelector('[data-prescriptions]');
+        container.replaceChildren();
+        const count = prescriptions.length;
+        document.querySelector('[data-prescription-summary]').textContent =
+            `${count} prescription${count === 1 ? '' : 's'}`;
+        if (count === 0) {
+            addText(container, 'p', 'No prescription is linked to this visit.', 'pharmacy-record-empty');
+            return;
+        }
+        prescriptions.forEach((prescription) => {
+            const card = document.createElement('article');
+            card.className = 'pharmacy-prescription-card';
+            const heading = document.createElement('div');
+            heading.className = 'pharmacy-prescription-heading';
+            addText(heading, 'strong', `Prescription #${prescription.prescription_id}`);
+            addText(heading, 'span', prescription.is_dispensed
+                ? `Dispensed ${formattedDate(prescription.dispensed_at)}`
+                : `${prescription.status.replaceAll('_', ' ')} · Visit #${prescription.prescription_visit_id}`);
+            card.appendChild(heading);
+            const tableWrap = document.createElement('div');
+            tableWrap.className = 'pharmacy-table-wrap';
+            const table = document.createElement('table');
+            table.className = 'admin-table pharmacy-items-table';
+            const thead = document.createElement('thead');
+            const header = document.createElement('tr');
+            ['Medicine', 'Directions', 'Qty', 'Price', 'Stock', 'State'].forEach((label) => {
+                addText(header, 'th', label);
+            });
+            thead.appendChild(header);
+            table.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            prescription.items.forEach((item) => {
+                const row = document.createElement('tr');
+                addText(row, 'td', item.medicine_name);
+                addText(row, 'td', [item.dosage, item.frequency, item.duration, item.instructions]
+                    .filter(Boolean).join(' · ') || '—');
+                addText(row, 'td', item.quantity);
+                addText(row, 'td', money(item.unit_price));
+                addText(row, 'td', item.stock_available);
+                addText(row, 'td', item.is_dispensed ? 'Dispensed' : item.is_billed ? 'Billed' : 'Not billed');
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            tableWrap.appendChild(table);
+            card.appendChild(tableWrap);
+            container.appendChild(card);
+        });
+    }
+
+    function renderBill(bill) {
+        const groups = document.querySelector('[data-bill-groups]');
+        groups.replaceChildren();
+        if (bill.groups.length === 0) {
+            addText(groups, 'p', 'No charges recorded for this visit.', 'pharmacy-record-empty');
+        } else {
+            bill.groups.forEach((group) => {
+                const section = document.createElement('section');
+                section.className = 'pharmacy-bill-group';
+                const heading = document.createElement('div');
+                heading.className = 'pharmacy-bill-group-heading';
+                addText(heading, 'h4', group.charge_type.replaceAll('_', ' '));
+                addText(heading, 'strong', money(group.total));
+                section.appendChild(heading);
+                group.items.forEach((item) => {
+                    const row = document.createElement('div');
+                    row.className = 'pharmacy-bill-item';
+                    addText(row, 'span', `${item.description} · ${item.quantity} × ${money(item.unit_amount)}`);
+                    addText(row, 'strong', money(item.line_total));
+                    section.appendChild(row);
+                });
+                groups.appendChild(section);
+            });
+        }
+        document.querySelector('[data-bill-number]').textContent =
+            `${bill.bill_number} · ${bill.status.replaceAll('_', ' ')}`;
+        document.querySelector('[data-bill-total]').textContent = money(bill.total);
+        document.querySelector('[data-approved-payments]').textContent = money(bill.approved_payments);
+        document.querySelector('[data-balance]').textContent = money(bill.balance);
+        document.querySelector('[data-payment-form]').elements.amount.value =
+            Number(bill.balance) > 0 ? money(bill.balance) : '';
+        document.querySelector('[data-payment-form] [data-take-payment]').disabled =
+            Number(bill.balance) <= 0;
+    }
+
+    function renderPayments(payments) {
+        const container = document.querySelector('[data-payments]');
+        container.replaceChildren();
+        if (payments.length === 0) {
+            addText(container, 'p', 'No payments recorded.', 'pharmacy-record-empty');
+            return;
+        }
+        payments.forEach((payment) => {
+            const row = document.createElement('div');
+            row.className = 'pharmacy-payment-row';
+            const details = document.createElement('div');
+            addText(details, 'strong', `${payment.payment_method.replaceAll('_', ' ')} · ${money(payment.amount)}`);
+            addText(details, 'small', `${payment.receipt_number || 'No receipt'} · ${formattedDate(payment.paid_at)}${payment.is_simulated ? ' · simulated' : ''}`);
+            row.appendChild(details);
+            if (payment.payment_id && payment.receipt_number) {
+                const receipt = document.createElement('a');
+                receipt.className = 'button button-outline button-small';
+                receipt.href = `receipt.php?payment_id=${encodeURIComponent(payment.payment_id)}`;
+                receipt.textContent = 'Receipt';
+                row.appendChild(receipt);
+            }
+            container.appendChild(row);
+        });
+    }
+
+    function renderAvailablePrescriptions(prescriptions) {
+        const section = document.querySelector('[data-available-section]');
+        const select = document.querySelector('[data-prescription-select]');
+        section.hidden = !state.visit.visit.medication_collection_only;
+        select.replaceChildren();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = prescriptions.length
+            ? 'Select an earlier active prescription'
+            : 'No eligible earlier prescriptions';
+        select.appendChild(placeholder);
+        prescriptions.forEach((prescription) => {
+            const option = document.createElement('option');
+            option.value = String(prescription.prescription_id);
+            const medicines = prescription.items.map((item) => item.medicine_name).join(', ');
+            option.textContent = `Visit #${prescription.prescription_visit_id}: ${medicines}`;
+            select.appendChild(option);
+        });
+        document.querySelector('[data-select-prescription]').disabled =
+            prescriptions.length === 0;
+    }
+
+    function populateSchemes(schemes) {
+        const select = document.querySelector('[data-scheme-select]');
+        select.replaceChildren();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = schemes.length ? 'Select a scheme' : 'No active schemes';
+        select.appendChild(placeholder);
+        schemes.forEach((scheme) => {
+            const option = document.createElement('option');
+            option.value = String(scheme.medical_aid_scheme_id);
+            option.textContent = scheme.scheme_name;
+            select.appendChild(option);
+        });
+    }
+
+    async function openVisit(visitId, setSelection = true) {
+        if (setSelection) {
+            state.selectedVisitId = visitId;
+            renderQueue();
+        }
+        try {
+            state.visit = await parseRequest(`/api/pharmacy/visits/${visitId}`);
+            const { visit, bill, prescriptions, available_prescriptions, payments, medical_aid_schemes } = state.visit;
+            document.querySelector('[data-visit-heading]').textContent =
+                `${visit.patient_name || 'Patient'} · Visit #${visit.visit_id}`;
+            document.querySelector('[data-visit-subheading]').textContent =
+                `${visit.patient_number} · ${visit.is_emergency ? 'Emergency visit' : visit.medication_collection_only ? 'Medication collection only' : 'Hospital visit'}`;
+            document.querySelector('[data-visit-status]').textContent = visit.status.replaceAll('_', ' ');
+            document.querySelector('[data-visit-status]').className =
+                `pharmacy-status pharmacy-status-${visit.status}`;
+            renderPrescriptions(prescriptions);
+            renderBill(bill);
+            renderPayments(payments);
+            renderAvailablePrescriptions(available_prescriptions);
+            populateSchemes(medical_aid_schemes);
+            const activeUndispensed = prescriptions.some(
+                (prescription) => prescription.status === 'active' && !prescription.is_dispensed
+            );
+            document.querySelector('[data-dispense]').disabled =
+                !activeUndispensed || Number(bill.balance) > 0 || visit.status === 'completed';
+            document.querySelector('[data-visit-panel]').hidden = false;
+        } catch (error) {
+            showMessage(error.message);
+        }
+    }
+
+    async function selectPrescription() {
+        if (!state.selectedVisitId) return;
+        const select = document.querySelector('[data-prescription-select]');
+        if (!select.value) {
+            showMessage('Select an active earlier prescription first.');
+            return;
+        }
+        const button = document.querySelector('[data-select-prescription]');
+        button.disabled = true;
+        try {
+            await parseRequest(`/api/pharmacy/visits/${state.selectedVisitId}/prescription`, {
+                method: 'POST',
+                body: JSON.stringify({ prescription_id: Number(select.value) }),
+            });
+            showMessage('Prescription selected and medication charges added to this visit.', 'success');
+            await openVisit(state.selectedVisitId, false);
+            await loadQueue(document.querySelector('#pharmacy-search').value, state.selectedVisitId);
+        } catch (error) {
+            showMessage(error.message);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    function updateMedicalAidFields() {
+        const form = document.querySelector('[data-payment-form]');
+        const medicalAid = form.elements.payment_method.value === 'medical_aid';
+        document.querySelector('[data-medical-aid-fields]').hidden = !medicalAid;
+        form.elements.medical_aid_scheme_id.required = medicalAid;
+        form.elements.member_number.required = medicalAid;
+    }
+
+    async function takePayment(event) {
+        event.preventDefault();
+        if (!state.selectedVisitId) return;
+        const form = event.currentTarget;
+        if (!form.reportValidity()) return;
+        const body = {
+            payment_method: form.elements.payment_method.value,
+            amount: form.elements.amount.value,
+        };
+        if (body.payment_method === 'medical_aid') {
+            body.medical_aid_scheme_id = Number(form.elements.medical_aid_scheme_id.value);
+            body.member_number = form.elements.member_number.value.trim();
+            body.member_name = form.elements.member_name.value.trim();
+        }
+        const button = form.querySelector('[data-take-payment]');
+        button.disabled = true;
+        try {
+            const data = await parseRequest(`/api/pharmacy/visits/${state.selectedVisitId}/payments`, {
+                method: 'POST',
+                body: JSON.stringify(body),
+            });
+            showMessage(
+                `Payment recorded${data.is_simulated ? ' (simulated approval)' : ''}. Balance due: ${money(data.balance)}.`,
+                'success'
+            );
+            const visitId = state.selectedVisitId;
+            await loadQueue(document.querySelector('#pharmacy-search').value, visitId);
+            window.open(`receipt.php?payment_id=${encodeURIComponent(data.payment_id)}`, '_blank', 'noopener');
+        } catch (error) {
+            showMessage(error.message);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    async function dispenseMedication() {
+        if (!state.selectedVisitId) return;
+        if (!window.confirm('Confirm that the listed medicines are being dispensed?')) return;
+        const button = document.querySelector('[data-dispense]');
+        button.disabled = true;
+        try {
+            await parseRequest(`/api/pharmacy/visits/${state.selectedVisitId}/dispense`, {
+                method: 'POST',
+                body: JSON.stringify({}),
+            });
+            showMessage('Medication dispensed, stock updated, and visit completed.', 'success');
+            await loadQueue(document.querySelector('#pharmacy-search').value, null);
+        } catch (error) {
+            showMessage(error.message);
+            button.disabled = false;
+        }
+    }
+
+    function appendReceiptCell(row, value) {
+        const cell = document.createElement('td');
+        cell.textContent = value === null || value === '' ? '—' : String(value);
+        row.appendChild(cell);
+    }
+
+    async function loadReceipt() {
+        const paymentId = new URLSearchParams(window.location.search).get('payment_id');
+        if (!paymentId || !/^[1-9][0-9]*$/.test(paymentId)) {
+            showMessage('A valid payment ID is required.');
+            return;
+        }
+        const data = await parseRequest(`/api/pharmacy/payments/${paymentId}/receipt`);
+        document.querySelector('[data-receipt-number]').textContent = data.payment.receipt_number;
+        document.querySelector('[data-receipt-bill]').textContent = data.bill.bill_number;
+        document.querySelector('[data-receipt-patient]').textContent = data.visit.patient_name;
+        document.querySelector('[data-receipt-patient-number]').textContent = data.visit.patient_number;
+        document.querySelector('[data-receipt-visit]').textContent = String(data.visit.visit_id);
+        document.querySelector('[data-receipt-date]').textContent = formattedDate(data.payment.paid_at);
+        document.querySelector('[data-receipt-method]').textContent =
+            `${data.payment.payment_method.replaceAll('_', ' ')}${data.payment.is_simulated ? ' (simulated)' : ''}`;
+        document.querySelector('[data-receipt-status]').textContent = data.payment.status;
+        document.querySelector('[data-receipt-amount]').textContent = money(data.payment.amount);
+        document.querySelector('[data-simulated-badge]').hidden = !data.payment.is_simulated;
+        const tbody = document.querySelector('[data-receipt-items]');
+        tbody.replaceChildren();
+        data.bill.items.forEach((item) => {
+            const row = document.createElement('tr');
+            appendReceiptCell(row, item.charge_type.replaceAll('_', ' '));
+            appendReceiptCell(row, item.description);
+            appendReceiptCell(row, item.quantity);
+            appendReceiptCell(row, money(item.unit_amount));
+            appendReceiptCell(row, money(item.line_total));
+            tbody.appendChild(row);
+        });
+        document.querySelector('[data-receipt]').hidden = false;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        document.querySelector('[data-sign-out]')?.addEventListener('click', async () => {
+            try {
+                await parseRequest('/api/auth/logout', { method: 'POST' });
+                window.location.replace(`${projectBase}/auth/login.php`);
+            } catch (error) {
+                showMessage(error.message);
+            }
+        });
+        document.querySelector('[data-search]')?.addEventListener('click', () => {
+            loadQueue(document.querySelector('#pharmacy-search').value.trim(), null);
+        });
+        document.querySelector('#pharmacy-search')?.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                loadQueue(event.currentTarget.value.trim(), null);
+            }
+        });
+        document.querySelector('[data-select-prescription]')?.addEventListener('click', selectPrescription);
+        document.querySelector('[data-payment-form]')?.addEventListener('submit', takePayment);
+        document.querySelector('[data-payment-form]')?.elements.payment_method.addEventListener(
+            'change',
+            updateMedicalAidFields
+        );
+        document.querySelector('[data-dispense]')?.addEventListener('click', dispenseMedication);
+        document.querySelector('[data-print]')?.addEventListener('click', () => window.print());
+        try {
+            if (!await verifySession()) return;
+            if (document.body.hasAttribute('data-receipt-page')) {
+                await loadReceipt();
+                return;
+            }
+            updateMedicalAidFields();
+            await loadQueue();
+        } catch (error) {
+            showMessage(error.message);
+        }
+    });
+})();

@@ -19,6 +19,7 @@
             <nav class="side-nav" aria-label="Main navigation">
                 <a class="side-link active" href="dashboard.php"><span aria-hidden="true">⌂</span> Overview</a>
                 <a class="side-link" href="#activity"><span aria-hidden="true">◷</span> Recent activity</a>
+                <a class="side-link" href="visit-status.php" hidden data-module-link data-roles="system_administrator,emergency_doctor,emergency_nurse,nurse,general_doctor,resident_specialist,locum_specialist,testing_desk_clerk,laboratory_technician,radiographer,cardiac_technician,therapist,pharmacist"><span aria-hidden="true">◷</span> Visit status tracker</a>
                 <a class="side-link reception-only" href="reception/index.php" hidden><span aria-hidden="true">⌕</span> Reception desk</a>
                 <a class="side-link nursing-only" href="nursing/index.php" hidden><span aria-hidden="true">＋</span> Nursing</a>
                 <a class="side-link doctor-only" href="doctor/index.php" hidden><span aria-hidden="true">＋</span> General doctor</a>
@@ -29,6 +30,7 @@
                 <a class="side-link" href="billing/index.php" hidden data-module-link data-roles="cashier,system_administrator"><span aria-hidden="true">$</span> Cashier / Billing</a>
                 <a class="side-link" href="specialists/index.php" hidden data-module-link data-roles="resident_specialist,locum_specialist,system_administrator"><span aria-hidden="true">＋</span> Specialists</a>
                 <a class="side-link" href="therapy/index.php" hidden data-module-link data-roles="therapist,system_administrator"><span aria-hidden="true">＋</span> Therapy</a>
+                <a class="side-link" href="pharmacy/index.php" hidden data-module-link data-roles="pharmacist,system_administrator"><span aria-hidden="true">＋</span> Pharmacy</a>
                 <a class="side-link admin-only" href="../auth/signup.php" hidden><span aria-hidden="true">＋</span> Staff accounts</a>
             </nav>
             <div class="sidebar-bottom">

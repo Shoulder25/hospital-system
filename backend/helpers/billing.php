@@ -168,6 +168,91 @@ function billingAddFeeItemOnce(
     ];
 }
 
+function billingAddMedicationItemOnce(
+    PDO $database,
+    int $billId,
+    int $prescriptionItemId
+): array {
+    $itemStatement = $database->prepare(
+        'SELECT prescription_item.prescription_item_id,
+                prescription_item.prescription_id,
+                prescription_item.quantity, prescription.status,
+                medicine.medicine_id, medicine.medicine_name,
+                medicine.unit_price
+         FROM prescription_items prescription_item
+         INNER JOIN prescriptions prescription
+            ON prescription.prescription_id = prescription_item.prescription_id
+         INNER JOIN medicines medicine
+            ON medicine.medicine_id = prescription_item.medicine_id
+         WHERE prescription_item.prescription_item_id = :prescription_item_id
+         LIMIT 1
+         FOR UPDATE'
+    );
+    $itemStatement->execute(['prescription_item_id' => $prescriptionItemId]);
+    $item = $itemStatement->fetch();
+    if ($item === false || $item['status'] !== 'active'
+        || (float) $item['unit_price'] < 0
+        || (float) $item['quantity'] <= 0) {
+        throw new RuntimeException('The active prescription item is unavailable.');
+    }
+
+    $existingStatement = $database->prepare(
+        'SELECT bill_item_id, bill_id, fee_id, description, quantity, unit_amount
+         FROM bill_items
+         WHERE prescription_item_id = :prescription_item_id
+         ORDER BY bill_item_id
+         LIMIT 1
+         FOR UPDATE'
+    );
+    $existingStatement->execute([
+        'prescription_item_id' => $prescriptionItemId,
+    ]);
+    $existing = $existingStatement->fetch();
+    if ($existing !== false) {
+        if ((int) $existing['bill_id'] !== $billId) {
+            throw new RuntimeException(
+                'This prescription item is already billed to another visit.'
+            );
+        }
+
+        return [
+            'bill_item_id' => (int) $existing['bill_item_id'],
+            'fee_id' => $existing['fee_id'] === null
+                ? null
+                : (int) $existing['fee_id'],
+            'description' => $existing['description'],
+            'quantity' => (string) $existing['quantity'],
+            'unit_amount' => (string) $existing['unit_amount'],
+            'created' => false,
+        ];
+    }
+
+    $insert = $database->prepare(
+        'INSERT INTO bill_items
+            (bill_id, charge_type, description, quantity, unit_amount,
+             prescription_item_id)
+         VALUES
+            (:bill_id, \'medication\', :description, :quantity, :unit_amount,
+             :prescription_item_id)'
+    );
+    $insert->execute([
+        'bill_id' => $billId,
+        'description' => $item['medicine_name'],
+        'quantity' => $item['quantity'],
+        'unit_amount' => $item['unit_price'],
+        'prescription_item_id' => $prescriptionItemId,
+    ]);
+
+    return [
+        'bill_item_id' => (int) $database->lastInsertId(),
+        'fee_id' => null,
+        'description' => $item['medicine_name'],
+        'quantity' => (string) $item['quantity'],
+        'unit_amount' => (string) $item['unit_price'],
+        'created' => true,
+    ];
+}
+
 function billingRefreshBillTotal(PDO $database, int $billId): string
 {
     $totalStatement = $database->prepare(

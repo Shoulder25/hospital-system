@@ -1,0 +1,31 @@
+.monitoring-page .tracking-content { max-width: 1150px; }
+.tracking-panel { overflow: hidden; margin: 20px 0; border: 1px solid #e5edef; border-radius: 11px; background: #fff; box-shadow: 0 3px 14px rgb(31 66 73 / 2%); }
+.tracking-search { padding: 22px; }
+.tracking-search label { display: block; margin-bottom: 8px; color: #415a60; font-size: 12px; font-weight: 700; }
+.tracking-search > div { display: flex; gap: 10px; }
+.tracking-search input { width: min(100%, 520px); min-height: 43px; padding: 0 12px; border: 1px solid #dbe5e6; border-radius: 7px; color: #263f46; font: inherit; font-size: 13px; }
+.tracking-search .button { min-height: 43px; padding: 0 18px; }
+.visit-summary { display: flex; justify-content: space-between; gap: 22px; padding: 22px; border-bottom: 1px solid #edf1f2; }
+.visit-summary h2 { margin: 0 0 9px; color: #263f46; font-size: 20px; }
+.visit-summary p { margin: 5px 0; color: #718388; font-size: 12px; }
+.visit-summary p strong { color: #40595f; }
+.current-status { display: flex; min-width: 190px; flex-direction: column; align-items: flex-end; gap: 8px; }
+.current-status span { color: #819195; font-size: 11px; }
+.current-status strong { border-radius: 20px; padding: 8px 12px; background: #eaf6f0; color: #35775a; font-size: 12px; text-transform: capitalize; }
+.visit-result h3 { margin: 0; padding: 18px 22px 0; color: #40595f; font-size: 14px; }
+.visit-timeline { margin: 0; padding: 14px 22px 22px 45px; }
+.visit-timeline li { position: relative; padding: 8px 0 13px 10px; border-left: 2px solid #dcebe8; color: #40595f; font-size: 12px; }
+.visit-timeline li:last-child { padding-bottom: 0; border-left-color: transparent; }
+.visit-timeline li::before { position: absolute; top: 10px; left: -6px; width: 10px; height: 10px; border-radius: 50%; background: #238a80; content: ''; }
+.visit-timeline time { display: block; margin-top: 4px; color: #879599; font-size: 10px; }
+.timeline-empty { padding: 16px 0; color: #879599; font-size: 12px; }
+
+@media (max-width: 620px) {
+    .tracking-search { padding: 16px; }
+    .tracking-search > div { align-items: stretch; flex-direction: column; }
+    .tracking-search input { width: 100%; }
+    .visit-summary { flex-direction: column; padding: 17px; }
+    .current-status { align-items: flex-start; }
+    .visit-result h3 { padding-right: 17px; padding-left: 17px; }
+    .visit-timeline { padding-right: 17px; padding-left: 39px; }
+}
