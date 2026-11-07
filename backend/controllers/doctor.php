@@ -757,8 +757,8 @@ function validateDoctorPrescriptionItems(mixed $items): array
 function createDoctorPrescription(
     PDO $database,
     int $visitId,
-    int $consultationId,
-    int $diagnosisId,
+    ?int $consultationId,
+    ?int $diagnosisId,
     int $doctorId,
     array $items
 ): int {
@@ -815,6 +815,63 @@ function createDoctorPrescription(
     }
 
     return $prescriptionId;
+}
+
+function createClinicalTherapyReferral(
+    PDO $database,
+    int $visitId,
+    int $consultationId,
+    int $diagnosisId,
+    int $clinicianId,
+    string $therapyType,
+    string $reason
+): int {
+    $statement = $database->prepare(
+        'INSERT INTO therapy_referrals
+            (visit_id, source_consultation_id, diagnosis_id,
+             referred_by_user_id, therapy_type, reason)
+         VALUES
+            (:visit_id, :consultation_id, :diagnosis_id,
+             :clinician_id, :therapy_type, :reason)'
+    );
+    $statement->execute([
+        'visit_id' => $visitId,
+        'consultation_id' => $consultationId,
+        'diagnosis_id' => $diagnosisId,
+        'clinician_id' => $clinicianId,
+        'therapy_type' => $therapyType,
+        'reason' => $reason,
+    ]);
+
+    return (int) $database->lastInsertId();
+}
+
+function doctorNextStatusAfterDiagnosis(PDO $database, int $visitId): string
+{
+    $therapyStatement = $database->prepare(
+        "SELECT therapy_referral_id
+         FROM therapy_referrals
+         WHERE visit_id = :visit_id
+           AND status IN ('referred', 'in_progress')
+         LIMIT 1"
+    );
+    $therapyStatement->execute(['visit_id' => $visitId]);
+    if ($therapyStatement->fetchColumn() !== false) {
+        return 'awaiting_therapy';
+    }
+
+    $prescriptionStatement = $database->prepare(
+        "SELECT prescription_id
+         FROM prescriptions
+         WHERE visit_id = :visit_id AND status = 'active'
+         LIMIT 1"
+    );
+    $prescriptionStatement->execute(['visit_id' => $visitId]);
+    if ($prescriptionStatement->fetchColumn() !== false) {
+        return 'awaiting_pharmacy';
+    }
+
+    return 'completed';
 }
 
 function handleDoctorDiagnosisCreate(): void
@@ -1104,22 +1161,15 @@ function handleDoctorDiagnosisCreate(): void
             $nextStatus = 'awaiting_specialist';
         } else {
             if ($therapyEnabled) {
-                $therapyStatement = $database->prepare(
-                    'INSERT INTO therapy_referrals
-                        (visit_id, source_consultation_id, diagnosis_id,
-                         referred_by_user_id, therapy_type, reason)
-                     VALUES
-                        (:visit_id, :consultation_id, :diagnosis_id,
-                         :doctor_id, :therapy_type, :reason)'
+                createClinicalTherapyReferral(
+                    $database,
+                    (int) $visitId,
+                    (int) $consultationId,
+                    $diagnosisId,
+                    (int) $user['user_id'],
+                    $therapyType,
+                    $therapyReason
                 );
-                $therapyStatement->execute([
-                    'visit_id' => (int) $visitId,
-                    'consultation_id' => (int) $consultationId,
-                    'diagnosis_id' => $diagnosisId,
-                    'doctor_id' => (int) $user['user_id'],
-                    'therapy_type' => $therapyType,
-                    'reason' => $therapyReason,
-                ]);
             }
             if ($items !== []) {
                 $prescriptionId = createDoctorPrescription(
@@ -1130,10 +1180,8 @@ function handleDoctorDiagnosisCreate(): void
                     (int) $user['user_id'],
                     $items
                 );
-                $nextStatus = $therapyEnabled ? 'awaiting_therapy' : 'awaiting_pharmacy';
-            } else {
-                $nextStatus = $therapyEnabled ? 'awaiting_therapy' : 'completed';
             }
+            $nextStatus = doctorNextStatusAfterDiagnosis($database, (int) $visitId);
         }
 
         $visitUpdate = $database->prepare(
@@ -1280,9 +1328,7 @@ function handleDoctorPrescriptionCreate(): void
             (int) $user['user_id'],
             $items
         );
-        $nextStatus = $visit['status'] === 'awaiting_therapy'
-            ? 'awaiting_therapy'
-            : 'awaiting_pharmacy';
+        $nextStatus = doctorNextStatusAfterDiagnosis($database, (int) $visitId);
         $visitUpdate = $database->prepare(
             'UPDATE visits SET status = :status
              WHERE visit_id = :visit_id'

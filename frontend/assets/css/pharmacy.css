@@ -61,6 +61,10 @@
 .pharmacy-payment-row > div { display: grid; gap: 4px; }
 .pharmacy-payment-row strong { color: #30494f; font-size: 11px; text-transform: capitalize; }
 .pharmacy-payment-row small { color: #829197; font-size: 10px; }
+.pharmacy-dispensings { display: grid; gap: 8px; }
+.pharmacy-dispensing-record { display: grid; gap: 6px; border: 1px solid #e7edef; border-radius: 7px; padding: 10px 12px; color: #63777c; font-size: 11px; }
+.pharmacy-dispensing-record strong { color: #30494f; }
+.pharmacy-dispensing-record small { color: #829197; }
 .pharmacy-payment-form { display: grid; gap: 12px; }
 .pharmacy-form-grid, .pharmacy-medical-aid-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .pharmacy-field { display: grid; min-width: 0; gap: 6px; color: #536a71; font-size: 11px; font-weight: 700; }
@@ -83,6 +87,12 @@
 .pharmacy-receipt-table-wrap .admin-table { min-width: 650px; }
 .pharmacy-receipt-total { display: flex; justify-content: flex-end; align-items: baseline; gap: 30px; padding: 20px 4px; color: #30494f; }
 .pharmacy-receipt-total strong { font-size: 22px; }
+.pharmacy-prior-payments { display: grid; gap: 10px; padding-top: 20px; }
+.pharmacy-prior-payments h2 { margin: 0; color: #30494f; font-size: 14px; }
+.pharmacy-prior-payments .admin-table { min-width: 650px; }
+.pharmacy-receipt-balance { display: grid; max-width: 420px; gap: 8px; margin: 0 0 18px auto; }
+.pharmacy-receipt-balance div { display: flex; justify-content: space-between; gap: 18px; color: #63777c; font-size: 11px; }
+.pharmacy-receipt-balance dd { margin: 0; color: #30494f; font-weight: 700; }
 .pharmacy-page [data-visit-panel] [data-visit-status] { text-transform: capitalize; }
 
 @media (max-width: 900px) {

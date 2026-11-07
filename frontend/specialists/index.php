@@ -95,7 +95,7 @@ $initial = $initialMatch[0] ?? 'S';
                                     <h3>Outside referral and deferred charge</h3>
                                     <label class="specialist-field"><span>Outside hospital or doctor name <b aria-hidden="true">*</b></span><input name="provider_name" maxlength="150" type="text"></label>
                                     <label class="specialist-field"><span>Clinical summary <b aria-hidden="true">*</b></span><textarea name="clinical_summary" rows="4" maxlength="10000"></textarea></label>
-                                    <label class="specialist-field"><span>Outside tests charge (manual amount) <b aria-hidden="true">*</b></span><input name="outside_tests_amount" type="number" min="0.01" max="9999999999.99" step="0.01"></label>
+                                    <label class="specialist-field"><span>Outside tests charge (manual amount) <b aria-hidden="true">*</b></span><input name="outside_tests_amount" type="number" min="0.01" max="99999999.99" step="0.01"></label>
                                     <p class="specialist-hint">The amount is entered for this referral and billed as an unpaid visit charge.</p>
                                 </div>
                                 <button class="button button-primary specialist-submit" type="submit">Save outcome</button>

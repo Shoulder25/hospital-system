@@ -89,6 +89,10 @@ $initial = $initialMatch[0] ?? 'P';
                                 <h3>Payments and receipts</h3>
                                 <div class="pharmacy-payments" data-payments><p class="pharmacy-record-empty">No payments recorded.</p></div>
                             </section>
+                            <section class="pharmacy-section">
+                                <h3>Dispensing history</h3>
+                                <div class="pharmacy-dispensings" data-dispensings><p class="pharmacy-record-empty">No dispensing records for this visit.</p></div>
+                            </section>
                             <section class="pharmacy-section pharmacy-payment-section">
                                 <form class="pharmacy-payment-form" data-payment-form>
                                     <h3>Take payment</h3>
@@ -97,6 +101,7 @@ $initial = $initialMatch[0] ?? 'P';
                                         <label class="pharmacy-field"><span>Amount</span><input name="amount" type="number" min="0.01" max="9999999999.99" step="0.01" required></label>
                                     </div>
                                     <div class="pharmacy-medical-aid-fields" data-medical-aid-fields hidden>
+                                        <label class="pharmacy-field"><span>Saved membership</span><select name="saved_membership" data-membership-select><option value="">No saved memberships</option></select></label>
                                         <label class="pharmacy-field"><span>Scheme</span><select name="medical_aid_scheme_id" data-scheme-select></select></label>
                                         <label class="pharmacy-field"><span>Member number</span><input name="member_number" maxlength="100" type="text"></label>
                                         <label class="pharmacy-field"><span>Member name <small>(defaults to patient)</small></span><input name="member_name" maxlength="150" type="text"></label>

@@ -336,6 +336,7 @@ CREATE TABLE IF NOT EXISTS outside_referrals (
     outside_referral_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     visit_id INT UNSIGNED NOT NULL,
     source_consultation_id INT UNSIGNED NOT NULL,
+    specialist_referral_id INT UNSIGNED NULL,
     organization_id INT UNSIGNED NULL,
     provider_name VARCHAR(150) NULL,
     clinical_summary TEXT NOT NULL,
@@ -344,12 +345,16 @@ CREATE TABLE IF NOT EXISTS outside_referrals (
         NOT NULL DEFAULT 'issued',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (outside_referral_id),
+    UNIQUE KEY uq_outside_referrals_specialist_referral (specialist_referral_id),
     KEY idx_outside_referrals_visit (visit_id, created_at),
     CONSTRAINT fk_outside_referrals_visit
         FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
     CONSTRAINT fk_outside_referrals_consultation
         FOREIGN KEY (source_consultation_id)
         REFERENCES consultations (consultation_id),
+    CONSTRAINT fk_outside_referrals_specialist_referral
+        FOREIGN KEY (specialist_referral_id)
+        REFERENCES specialist_referrals (specialist_referral_id),
     CONSTRAINT fk_outside_referrals_organization
         FOREIGN KEY (organization_id) REFERENCES organizations (organization_id)
         ON DELETE SET NULL
@@ -385,10 +390,12 @@ CREATE TABLE IF NOT EXISTS therapy_sessions (
     therapy_referral_id INT UNSIGNED NOT NULL,
     therapist_user_id INT UNSIGNED NOT NULL,
     session_notes TEXT NULL,
+    client_request_id CHAR(36) NULL,
     session_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (therapy_session_id),
     KEY idx_therapy_sessions_referral (therapy_referral_id, session_at),
     KEY idx_therapy_sessions_therapist (therapist_user_id),
+    UNIQUE KEY uq_therapy_sessions_client_request (client_request_id),
     CONSTRAINT fk_therapy_sessions_referral
         FOREIGN KEY (therapy_referral_id)
         REFERENCES therapy_referrals (therapy_referral_id),
@@ -566,10 +573,13 @@ CREATE TABLE IF NOT EXISTS payments (
     external_reference VARCHAR(150) NULL,
     receipt_number VARCHAR(50) NULL,
     is_simulated TINYINT(1) NOT NULL DEFAULT 0,
+    client_request_id CHAR(36) NULL,
+    client_request_hash CHAR(64) NULL,
     paid_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (payment_id),
     UNIQUE KEY uq_payments_receipt_number (receipt_number),
+    UNIQUE KEY uq_payments_client_request (client_request_id),
     KEY idx_payments_bill (bill_id, status),
     KEY idx_payments_membership (membership_id),
     CONSTRAINT fk_payments_bill

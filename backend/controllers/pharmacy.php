@@ -95,11 +95,14 @@ function pharmacyRelatedPrescriptions(
         'SELECT DISTINCT prescription.prescription_id,
                 prescription.visit_id AS prescription_visit_id,
                 prescription.status, prescription.created_at,
+                prescriber.display_name AS prescribed_by,
                 source_visit.arrived_at AS prescription_visit_at,
                 dispensing.dispensing_id, dispensing.dispensed_at
          FROM prescriptions prescription
          INNER JOIN visits source_visit
             ON source_visit.visit_id = prescription.visit_id
+         INNER JOIN users prescriber
+            ON prescriber.user_id = prescription.prescribed_by_user_id
          LEFT JOIN dispensings dispensing
             ON dispensing.prescription_id = prescription.prescription_id
          WHERE prescription.visit_id = :visit_id
@@ -148,6 +151,7 @@ function pharmacyRelatedPrescriptions(
             'prescription_visit_id' => (int) $row['prescription_visit_id'],
             'status' => $row['status'],
             'created_at' => $row['created_at'],
+            'prescribed_by' => $row['prescribed_by'],
             'is_dispensed' => $row['dispensing_id'] !== null,
             'dispensed_at' => $row['dispensed_at'],
             'items' => array_map(static function (array $item): array {
@@ -173,6 +177,53 @@ function pharmacyRelatedPrescriptions(
     }
 
     return $prescriptions;
+}
+
+function pharmacyDispensingHistory(PDO $database, int $visitId): array
+{
+    $statement = $database->prepare(
+        'SELECT dispensing.dispensing_id, dispensing.prescription_id,
+                dispensing.dispensed_at, pharmacist.display_name AS pharmacist_name,
+                prescription_item.prescription_item_id, medicine.medicine_name,
+                dispensing_item.quantity_dispensed, dispensing_item.unit_price
+         FROM dispensings dispensing
+         INNER JOIN prescriptions prescription
+            ON prescription.prescription_id = dispensing.prescription_id
+         INNER JOIN users pharmacist
+            ON pharmacist.user_id = dispensing.pharmacist_user_id
+         INNER JOIN dispensing_items dispensing_item
+            ON dispensing_item.dispensing_id = dispensing.dispensing_id
+         INNER JOIN prescription_items prescription_item
+            ON prescription_item.prescription_item_id =
+               dispensing_item.prescription_item_id
+         INNER JOIN medicines medicine
+            ON medicine.medicine_id = dispensing_item.medicine_id
+         WHERE dispensing.visit_id = :visit_id
+         ORDER BY dispensing.dispensed_at, dispensing.dispensing_id,
+                  dispensing_item.dispensing_item_id'
+    );
+    $statement->execute(['visit_id' => $visitId]);
+    $dispensings = [];
+    foreach ($statement->fetchAll() as $row) {
+        $dispensingId = (int) $row['dispensing_id'];
+        if (!isset($dispensings[$dispensingId])) {
+            $dispensings[$dispensingId] = [
+                'dispensing_id' => $dispensingId,
+                'prescription_id' => (int) $row['prescription_id'],
+                'dispensed_at' => $row['dispensed_at'],
+                'pharmacist_name' => $row['pharmacist_name'],
+                'items' => [],
+            ];
+        }
+        $dispensings[$dispensingId]['items'][] = [
+            'prescription_item_id' => (int) $row['prescription_item_id'],
+            'medicine_name' => $row['medicine_name'],
+            'quantity_dispensed' => (string) $row['quantity_dispensed'],
+            'unit_price' => (string) $row['unit_price'],
+        ];
+    }
+
+    return array_values($dispensings);
 }
 
 function pharmacyAvailablePrescriptions(
@@ -365,6 +416,7 @@ function pharmacyUpdateVisitCompletion(
                 SELECT 1 FROM dispensings dispensing
                 WHERE dispensing.prescription_id = prescription.prescription_id
            )
+           AND prescription.status = \'active\'
          LIMIT 1'
     );
     $undispensed->execute([
@@ -414,6 +466,19 @@ function pharmacyVisitDetails(PDO $database, array $visit, array $bill): array
          WHERE is_active = 1
          ORDER BY scheme_name'
     )->fetchAll();
+    $membershipStatement = $database->prepare(
+        'SELECT membership.membership_id, membership.medical_aid_scheme_id,
+                scheme.scheme_name, membership.member_number,
+                membership.member_name
+         FROM patient_medical_aid_memberships membership
+         INNER JOIN medical_aid_schemes scheme
+            ON scheme.medical_aid_scheme_id = membership.medical_aid_scheme_id
+         WHERE membership.patient_id = :patient_id
+           AND membership.is_active = 1
+           AND scheme.is_active = 1
+         ORDER BY scheme.scheme_name, membership.member_name'
+    );
+    $membershipStatement->execute(['patient_id' => (int) $visit['patient_id']]);
 
     return [
         'visit' => [
@@ -451,6 +516,23 @@ function pharmacyVisitDetails(PDO $database, array $visit, array $bill): array
             )
             : [],
         'payments' => $payments,
+        'dispensings' => pharmacyDispensingHistory(
+            $database,
+            (int) $visit['visit_id']
+        ),
+        'medical_aid_memberships' => array_map(
+            static function (array $membership): array {
+                return [
+                    'membership_id' => (int) $membership['membership_id'],
+                    'medical_aid_scheme_id' =>
+                        (int) $membership['medical_aid_scheme_id'],
+                    'scheme_name' => $membership['scheme_name'],
+                    'member_number' => $membership['member_number'],
+                    'member_name' => $membership['member_name'],
+                ];
+            },
+            $membershipStatement->fetchAll()
+        ),
         'medical_aid_schemes' => array_map(static function (array $scheme): array {
             return [
                 'medical_aid_scheme_id' => (int) $scheme['medical_aid_scheme_id'],
@@ -493,7 +575,46 @@ function handlePharmacyQueueGet(string $search): void
     $statement = $database->prepare(
         'SELECT visit.visit_id, visit.patient_id, visit.status, visit.arrived_at,
                 visit.is_emergency, visit.medication_collection_only,
-                patient.patient_number, patient.first_name, patient.last_name
+                patient.patient_number, patient.first_name, patient.last_name,
+                COALESCE((
+                    SELECT SUM(item.quantity * item.unit_amount)
+                    FROM bill_items item
+                    INNER JOIN bills visit_bill ON visit_bill.bill_id = item.bill_id
+                    WHERE visit_bill.visit_id = visit.visit_id
+                ), 0.00) AS billed_amount,
+                COALESCE((
+                    SELECT SUM(payment.amount)
+                    FROM payments payment
+                    INNER JOIN bills visit_bill ON visit_bill.bill_id = payment.bill_id
+                    WHERE visit_bill.visit_id = visit.visit_id
+                      AND payment.status = \'approved\'
+                ), 0.00) AS approved_amount,
+                COALESCE((
+                    SELECT COUNT(*)
+                    FROM prescriptions prescription
+                    WHERE (
+                        prescription.visit_id = visit.visit_id
+                        OR EXISTS (
+                            SELECT 1
+                            FROM prescription_items item
+                            INNER JOIN bill_items bill_item
+                                ON bill_item.prescription_item_id =
+                                   item.prescription_item_id
+                            INNER JOIN bills linked_bill
+                                ON linked_bill.bill_id = bill_item.bill_id
+                            WHERE item.prescription_id =
+                                  prescription.prescription_id
+                              AND linked_bill.visit_id = visit.visit_id
+                        )
+                    )
+                      AND prescription.status = \'active\'
+                ), 0) AS active_prescription_count,
+                (
+                    SELECT bill.status
+                    FROM bills bill
+                    WHERE bill.visit_id = visit.visit_id
+                    LIMIT 1
+                ) AS bill_status
          FROM visits visit
          INNER JOIN patients patient ON patient.patient_id = visit.patient_id
          WHERE visit.status IN (\'awaiting_pharmacy\', \'awaiting_payment\')'
@@ -515,6 +636,21 @@ function handlePharmacyQueueGet(string $search): void
             'arrived_at' => $row['arrived_at'],
             'is_emergency' => (bool) $row['is_emergency'],
             'medication_collection_only' => (bool) $row['medication_collection_only'],
+            'prescription_count' => (int) $row['active_prescription_count'],
+            'bill_status' => $row['bill_status'] ?? 'not_billed',
+            'bill_total' => number_format((float) $row['billed_amount'], 2, '.', ''),
+            'approved_payments' => number_format(
+                (float) $row['approved_amount'],
+                2,
+                '.',
+                ''
+            ),
+            'balance' => number_format(
+                max(0, (float) $row['billed_amount'] - (float) $row['approved_amount']),
+                2,
+                '.',
+                ''
+            ),
         ];
         recordPharmacyAudit(
             $database,
@@ -588,6 +724,49 @@ function handlePharmacyVisitGet(string $visitId): void
     }
     $details = pharmacyVisitDetails($database, $visit, $bill);
     jsonSuccess('Pharmacy visit loaded.', $details);
+}
+
+function handlePharmacyDispensingHistoryGet(string $visitId): void
+{
+    if (!ctype_digit($visitId) || (int) $visitId < 1) {
+        jsonError('A valid visit ID is required.', [
+            'visit_id' => 'Enter a positive visit ID.',
+        ], 422);
+    }
+
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    $visitStatement = $database->prepare(
+        'SELECT visit.patient_id, patient.patient_number,
+                patient.first_name, patient.last_name
+         FROM visits visit
+         INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+         WHERE visit.visit_id = :visit_id
+         LIMIT 1'
+    );
+    $visitStatement->execute(['visit_id' => (int) $visitId]);
+    $visit = $visitStatement->fetch();
+    if ($visit === false) {
+        jsonError('Visit not found.', [], 404);
+    }
+
+    recordPharmacyAudit(
+        $database,
+        (int) $user['user_id'],
+        'pharmacy.dispensing_history.viewed',
+        (int) $visit['patient_id'],
+        (int) $visitId
+    );
+    jsonSuccess('Dispensing history loaded.', [
+        'visit' => [
+            'visit_id' => (int) $visitId,
+            'patient_number' => $visit['patient_number'],
+            'patient_name' => trim(
+                (string) $visit['first_name'] . ' ' . (string) $visit['last_name']
+            ),
+        ],
+        'dispensings' => pharmacyDispensingHistory($database, (int) $visitId),
+    ]);
 }
 
 function handlePharmacyPrescriptionSelect(string $visitId): void
@@ -731,8 +910,19 @@ function handlePharmacyPaymentCreate(string $visitId): void
             'amount' => 'Enter a valid positive amount.',
         ], 422);
     }
+    $requestId = $input['client_request_id'] ?? null;
+    if (!is_string($requestId)
+        || !preg_match(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',
+            $requestId
+        )) {
+        jsonError('A valid payment request ID is required.', [
+            'client_request_id' => 'Send a UUID for this payment submission.',
+        ], 422);
+    }
     $schemeId = $input['medical_aid_scheme_id'] ?? null;
     $memberNumber = $input['member_number'] ?? null;
+    $memberName = $input['member_name'] ?? null;
     if ($paymentMethod === 'medical_aid') {
         if ((!is_int($schemeId) && !(is_string($schemeId) && ctype_digit($schemeId)))
             || (int) $schemeId < 1
@@ -744,7 +934,29 @@ function handlePharmacyPaymentCreate(string $visitId): void
                 'member_number' => 'Enter the member number.',
             ], 422);
         }
+        if ($memberName !== null && (!is_string($memberName)
+            || strlen(trim($memberName)) > 150)) {
+            jsonError('Enter a valid medical-aid member name.', [
+                'member_name' => 'Enter no more than 150 characters.',
+            ], 422);
+        }
     }
+    $requestHash = hash('sha256', json_encode([
+        'payment_method' => $paymentMethod,
+        'amount' => $amountValue === null
+            ? null
+            : number_format((float) $amountValue, 2, '.', ''),
+        'medical_aid_scheme_id' => $paymentMethod === 'medical_aid'
+            ? (int) $schemeId
+            : null,
+        'member_number' => $paymentMethod === 'medical_aid'
+            ? trim($memberNumber)
+            : null,
+        'member_name' => $paymentMethod === 'medical_aid'
+            && is_string($memberName) && trim($memberName) !== ''
+                ? trim($memberName)
+                : null,
+    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
     try {
         $database->beginTransaction();
@@ -753,6 +965,59 @@ function handlePharmacyPaymentCreate(string $visitId): void
             $database->rollBack();
             jsonError('Visit not found.', [], 404);
         }
+
+        $existingPaymentStatement = $database->prepare(
+            'SELECT payment.payment_id, payment.bill_id,
+                    bill.visit_id AS payment_visit_id,
+                    payment.recorded_by_user_id, payment.payment_method,
+                    payment.amount, payment.status, payment.is_simulated,
+                    payment.receipt_number, payment.membership_id,
+                    payment.client_request_hash
+             FROM payments payment
+             INNER JOIN bills bill ON bill.bill_id = payment.bill_id
+             WHERE payment.client_request_id = :client_request_id
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $existingPaymentStatement->execute([
+            'client_request_id' => $requestId,
+        ]);
+        $existingPayment = $existingPaymentStatement->fetch();
+        if ($existingPayment !== false) {
+            if ((int) $existingPayment['payment_visit_id'] !== (int) $visitId
+                || !is_string($existingPayment['client_request_hash'])
+                || !hash_equals($existingPayment['client_request_hash'], $requestHash)) {
+                $database->rollBack();
+                jsonError('This payment request ID was already used for a different payment.', [], 409);
+            }
+            $balance = billingGetBillBalance(
+                $database,
+                (int) $existingPayment['bill_id']
+            );
+            $database->commit();
+            jsonSuccess('This payment was already recorded.', [
+                'payment_id' => (int) $existingPayment['payment_id'],
+                'receipt_number' => $existingPayment['receipt_number'],
+                'amount' => (string) $existingPayment['amount'],
+                'payment_method' => $existingPayment['payment_method'],
+                'is_simulated' => (bool) $existingPayment['is_simulated'],
+                'membership_id' => $existingPayment['membership_id'] === null
+                    ? null
+                    : (int) $existingPayment['membership_id'],
+                'bill_id' => (int) $existingPayment['bill_id'],
+                'bill_total' => $balance['billed_amount'],
+                'approved_payments' => $balance['approved_amount'],
+                'balance' => $balance['balance'],
+                'bill_status' => (float) $balance['balance'] <= 0
+                    ? 'paid'
+                    : 'partially_paid',
+                'visit_id' => (int) $visitId,
+                'visit_completed' => $visit['status'] === 'completed',
+                'visit_status' => $visit['status'],
+                'created' => false,
+            ]);
+        }
+
         if (!in_array($visit['status'], ['awaiting_pharmacy', 'awaiting_payment'], true)) {
             $database->rollBack();
             jsonError('This visit is not awaiting pharmacy payment.', [], 409);
@@ -826,16 +1091,11 @@ function handlePharmacyPaymentCreate(string $visitId): void
             ]);
             $membershipId = $membership->fetchColumn();
             if ($membershipId === false) {
-                $memberName = $input['member_name'] ?? trim(
+                $memberName = is_string($memberName) && trim($memberName) !== ''
+                    ? trim($memberName)
+                    : trim(
                     (string) $visit['first_name'] . ' ' . (string) $visit['last_name']
                 );
-                if (!is_string($memberName) || trim($memberName) === ''
-                    || strlen(trim($memberName)) > 150) {
-                    $database->rollBack();
-                    jsonError('Enter a valid medical-aid member name.', [
-                        'member_name' => 'Enter no more than 150 characters.',
-                    ], 422);
-                }
                 $membershipInsert = $database->prepare(
                     'INSERT INTO patient_medical_aid_memberships
                         (patient_id, medical_aid_scheme_id, member_number,
@@ -847,7 +1107,7 @@ function handlePharmacyPaymentCreate(string $visitId): void
                     'patient_id' => (int) $visit['patient_id'],
                     'scheme_id' => (int) $schemeId,
                     'member_number' => trim($memberNumber),
-                    'member_name' => trim($memberName),
+                    'member_name' => $memberName,
                 ]);
                 $membershipId = (int) $database->lastInsertId();
             } else {
@@ -864,11 +1124,12 @@ function handlePharmacyPaymentCreate(string $visitId): void
         $paymentInsert = $database->prepare(
             'INSERT INTO payments
                 (bill_id, recorded_by_user_id, membership_id, payment_method,
-                 amount, status, receipt_number, is_simulated, paid_at)
-             VALUES
-                (:bill_id, :user_id, :membership_id, :payment_method,
-                 :amount, \'approved\', :receipt_number, :is_simulated,
-                 CURRENT_TIMESTAMP)'
+                     amount, status, receipt_number, is_simulated,
+                     client_request_id, client_request_hash, paid_at)
+                 VALUES
+                    (:bill_id, :user_id, :membership_id, :payment_method,
+                     :amount, \'approved\', :receipt_number, :is_simulated,
+                     :client_request_id, :client_request_hash, CURRENT_TIMESTAMP)'
         );
         $paymentInsert->execute([
             'bill_id' => (int) $bill['bill_id'],
@@ -878,6 +1139,8 @@ function handlePharmacyPaymentCreate(string $visitId): void
             'amount' => number_format($amount, 2, '.', ''),
             'receipt_number' => $receiptNumber,
             'is_simulated' => $paymentMethod === 'cash' ? 0 : 1,
+            'client_request_id' => $requestId,
+            'client_request_hash' => $requestHash,
         ]);
         $paymentId = (int) $database->lastInsertId();
         $balance = billingGetBillBalance($database, (int) $bill['bill_id']);
@@ -902,6 +1165,15 @@ function handlePharmacyPaymentCreate(string $visitId): void
             (int) $visit['patient_id'],
             (int) $visitId
         );
+        if ($paymentMethod === 'medical_aid') {
+            recordPharmacyAudit(
+                $database,
+                (int) $user['user_id'],
+                'pharmacy.medical_aid.approved.simulated',
+                (int) $visit['patient_id'],
+                (int) $visitId
+            );
+        }
         $database->commit();
     } catch (Throwable $exception) {
         if ($database->inTransaction()) {
@@ -928,6 +1200,7 @@ function handlePharmacyPaymentCreate(string $visitId): void
         'visit_status' => $visitCompleted
             ? 'completed'
             : $visit['status'],
+        'created' => true,
     ], 201);
 }
 
@@ -1074,7 +1347,9 @@ function handlePharmacyDispense(string $visitId): void
         $stockUpdate = $database->prepare(
             'UPDATE medicines
              SET quantity_in_stock = quantity_in_stock - :quantity
-             WHERE medicine_id = :medicine_id'
+             WHERE medicine_id = :medicine_id
+               AND is_active = 1
+               AND quantity_in_stock >= :required_quantity'
         );
         $dispensingIds = [];
         $dispensingByPrescription = [];
@@ -1101,7 +1376,11 @@ function handlePharmacyDispense(string $visitId): void
             $stockUpdate->execute([
                 'quantity' => $item['quantity'],
                 'medicine_id' => (int) $item['medicine_id'],
+                'required_quantity' => $item['quantity'],
             ]);
+            if ($stockUpdate->rowCount() !== 1) {
+                throw new RuntimeException('Medicine stock changed during dispensing.');
+            }
         }
 
         $prescriptionUpdate = $database->prepare(
@@ -1111,6 +1390,9 @@ function handlePharmacyDispense(string $visitId): void
         );
         foreach ($prescriptionIds as $prescriptionId) {
             $prescriptionUpdate->execute(['prescription_id' => $prescriptionId]);
+            if ($prescriptionUpdate->rowCount() !== 1) {
+                throw new RuntimeException('Prescription status changed during dispensing.');
+            }
         }
         $billUpdate = $database->prepare(
             'UPDATE bills SET status = \'paid\' WHERE bill_id = :bill_id'
@@ -1165,7 +1447,7 @@ function handlePharmacyReceiptGet(string $paymentId): void
     $statement = $database->prepare(
         'SELECT payment.payment_id, payment.payment_method, payment.amount,
                 payment.status AS payment_status, payment.is_simulated,
-                payment.receipt_number, payment.paid_at,
+                payment.receipt_number, payment.paid_at, payment.created_at,
                 bill.bill_id, bill.bill_number, bill.total_amount,
                 visit.visit_id, visit.patient_id,
                 patient.patient_number, patient.first_name, patient.last_name
@@ -1196,6 +1478,23 @@ function handlePharmacyReceiptGet(string $paymentId): void
          ORDER BY bill_item_id'
     );
     $items->execute(['bill_id' => (int) $payment['bill_id']]);
+    $balance = billingGetBillBalance($database, (int) $payment['bill_id']);
+    $priorPaymentStatement = $database->prepare(
+        'SELECT payment_id, payment_method, amount, status, is_simulated,
+                receipt_number, paid_at
+         FROM payments
+         WHERE bill_id = :bill_id
+           AND (
+                created_at < :created_at
+                OR (created_at = :created_at AND payment_id < :payment_id)
+           )
+         ORDER BY created_at, payment_id'
+    );
+    $priorPaymentStatement->execute([
+        'bill_id' => (int) $payment['bill_id'],
+        'created_at' => $payment['created_at'],
+        'payment_id' => (int) $payment['payment_id'],
+    ]);
 
     jsonSuccess('Payment receipt loaded.', [
         'payment' => [
@@ -1211,8 +1510,21 @@ function handlePharmacyReceiptGet(string $paymentId): void
             'bill_id' => (int) $payment['bill_id'],
             'bill_number' => $payment['bill_number'],
             'total_amount' => (string) $payment['total_amount'],
+            'approved_payments' => $balance['approved_amount'],
+            'remaining_balance' => $balance['balance'],
             'items' => $items->fetchAll(),
         ],
+        'prior_payments' => array_map(static function (array $prior): array {
+            return [
+                'payment_id' => (int) $prior['payment_id'],
+                'payment_method' => $prior['payment_method'],
+                'amount' => (string) $prior['amount'],
+                'status' => $prior['status'],
+                'is_simulated' => (bool) $prior['is_simulated'],
+                'receipt_number' => $prior['receipt_number'],
+                'paid_at' => $prior['paid_at'],
+            ];
+        }, $priorPaymentStatement->fetchAll()),
         'visit' => [
             'visit_id' => (int) $payment['visit_id'],
             'patient_number' => $payment['patient_number'],

@@ -2,9 +2,13 @@
 
 The specialist module uses the existing `specialist_referrals`,
 `consultations`, `diagnoses`, `therapy_referrals`, `outside_referrals`, `bills`,
-`bill_items`, and `audit_log` tables. No migration is required. This is an
-academic prototype; outside referral charges are manually entered and are not
-connected to an outside provider.
+`bill_items`, and `audit_log` tables. The additive migration
+`database/migrations/20261107_stage9_specialist_referrals.sql` adds a nullable,
+unique link from an outside referral to the specialist referral it resolves;
+existing outside referrals remain valid. Apply it once to an existing database.
+Fresh databases receive the same column and constraint from `database/hosp.sql`.
+This is an academic prototype; outside referral charges are manually entered
+and are not connected to an outside provider.
 
 ## Status transitions
 
@@ -30,6 +34,7 @@ assigned to their own user ID. POST requests require the existing
 | Method | Route | Request |
 |---|---|---|
 | GET | `/api/specialists/referrals` | None; returns assigned pending/accepted referrals with visit history and active medicines |
+| GET | `/api/specialists/referrals/{id}` | None; returns one assigned pending/accepted referral with its visit history |
 | POST | `/api/specialists/referrals/{id}/accept` | `{}` |
 | POST | `/api/specialists/referrals/{id}/outcome` | Diagnosed or undiagnosed outcome (fields below) |
 | GET | `/api/specialists/outside-referrals/{id}` | None; returns printable referral details |
@@ -80,8 +85,10 @@ Undiagnosed example:
 }
 ```
 
-The outside charge amount is entered manually and stored as a bill item with
-the active `OUTSIDE_TESTS_MANUAL` fee-catalog entry. It is not a real tariff.
+The outside charge amount is entered manually and stored as one bill item using
+the active `OUTSIDE_TESTS_MANUAL` fee-catalog entry. The item links to the
+outside-referral record, and duplicate charges for the same referral are
+prevented. It is not a real tariff.
 
 ## Browser testing
 

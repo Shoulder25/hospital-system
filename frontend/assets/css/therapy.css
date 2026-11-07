@@ -15,6 +15,7 @@
 .therapy-empty { padding: 24px 16px; color: #77898e; font-size: 12px; text-align: center; }
 .therapy-status { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 10px; background: #fff4dc; color: #805a10; font-size: 10px; font-weight: 800; text-transform: capitalize; white-space: nowrap; }
 .therapy-status-in_progress { background: #e8f1ff; color: #315b91; }
+.therapy-status-completed { background: #e6f4eb; color: #2f7047; }
 .therapy-record { display: grid; }
 .therapy-record-section { display: grid; gap: 12px; border-bottom: 1px solid #e8eef0; padding: 17px 20px; }
 .therapy-record-section h3 { margin: 0; color: #294850; font-size: 13px; }

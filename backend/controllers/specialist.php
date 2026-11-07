@@ -49,7 +49,8 @@ function specialistReferralForUpdate(
                 referral.source_consultation_id, referral.specialist_user_id,
                 referral.reason, referral.clinical_summary, referral.status,
                 visit.patient_id, visit.status AS visit_status,
-                patient.patient_number, patient.first_name, patient.last_name
+                patient.patient_number, patient.first_name, patient.last_name,
+                patient.date_of_birth, patient.gender, patient.is_temporary
          FROM specialist_referrals referral
          INNER JOIN visits visit ON visit.visit_id = referral.visit_id
          INNER JOIN patients patient ON patient.patient_id = visit.patient_id
@@ -164,6 +165,9 @@ function specialistReferralDetails(PDO $database, array $referral): array
             'name' => trim(
                 (string) $referral['first_name'] . ' ' . (string) $referral['last_name']
             ),
+            'date_of_birth' => $referral['date_of_birth'],
+            'gender' => $referral['gender'],
+            'is_temporary' => (bool) $referral['is_temporary'],
         ],
         'visit' => [
             'visit_id' => $visitId,
@@ -195,6 +199,7 @@ function handleSpecialistReferralsGet(): void
                 referral.reason, referral.clinical_summary, referral.status,
                 referral.created_at, visit.patient_id, visit.status AS visit_status,
                 patient.patient_number, patient.first_name, patient.last_name,
+                patient.date_of_birth, patient.gender, patient.is_temporary,
                 specialist.display_name AS specialist_name,
                 role.role_name AS specialist_role
          FROM specialist_referrals referral
@@ -222,6 +227,9 @@ function handleSpecialistReferralsGet(): void
             'patient_name' => trim(
                 (string) $row['first_name'] . ' ' . (string) $row['last_name']
             ),
+            'date_of_birth' => $row['date_of_birth'],
+            'gender' => $row['gender'],
+            'is_temporary' => (bool) $row['is_temporary'],
             'details' => specialistReferralDetails($database, $row),
         ];
         $referrals[] = $referral;
@@ -254,6 +262,67 @@ function handleSpecialistReferralsGet(): void
         'count' => count($referrals),
         'medicines' => $medicines,
     ]);
+}
+
+function handleSpecialistReferralGet(string $referralId): void
+{
+    if (!ctype_digit($referralId) || (int) $referralId < 1) {
+        jsonError('A valid specialist referral ID is required.', [], 422);
+    }
+
+    $database = getDatabaseConnection();
+    $user = requireSpecialistAccess($database);
+    $statement = $database->prepare(
+        'SELECT referral.specialist_referral_id, referral.visit_id,
+                referral.source_consultation_id, referral.specialist_user_id,
+                referral.reason, referral.clinical_summary, referral.status,
+                referral.created_at, visit.patient_id, visit.status AS visit_status,
+                patient.patient_number, patient.first_name, patient.last_name,
+                patient.date_of_birth, patient.gender, patient.is_temporary,
+                specialist.display_name AS specialist_name,
+                role.role_name AS specialist_role
+         FROM specialist_referrals referral
+         INNER JOIN visits visit ON visit.visit_id = referral.visit_id
+         INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+         INNER JOIN users specialist ON specialist.user_id = referral.specialist_user_id
+         INNER JOIN roles role ON role.role_id = specialist.role_id
+         WHERE referral.specialist_referral_id = :referral_id
+           AND referral.status IN (\'pending\', \'accepted\')
+         LIMIT 1'
+    );
+    $statement->execute(['referral_id' => (int) $referralId]);
+    $row = $statement->fetch();
+    if ($row === false) {
+        jsonError('Active specialist referral not found.', [], 404);
+    }
+    if ($user['role_name'] !== 'system_administrator'
+        && (int) $row['specialist_user_id'] !== (int) $user['user_id']) {
+        jsonError('This referral is assigned to another specialist.', [], 403);
+    }
+
+    $referral = [
+        'specialist_referral_id' => (int) $row['specialist_referral_id'],
+        'visit_id' => (int) $row['visit_id'],
+        'specialist_user_id' => (int) $row['specialist_user_id'],
+        'specialist_name' => $row['specialist_name'],
+        'specialist_role' => $row['specialist_role'],
+        'created_at' => $row['created_at'],
+        'patient_id' => (int) $row['patient_id'],
+        'patient_number' => $row['patient_number'],
+        'patient_name' => trim(
+            (string) $row['first_name'] . ' ' . (string) $row['last_name']
+        ),
+        'details' => specialistReferralDetails($database, $row),
+    ];
+    specialistRecordAudit(
+        $database,
+        (int) $user['user_id'],
+        'specialist.referral.viewed',
+        (int) $row['patient_id'],
+        (int) $row['visit_id']
+    );
+
+    jsonSuccess('Specialist referral loaded.', ['referral' => $referral]);
 }
 
 function handleSpecialistReferralAccept(string $referralId): void
@@ -373,7 +442,13 @@ function handleSpecialistReferralOutcome(string $referralId): void
             $errors
         );
         $clinicalFindings = specialistOptionalText($input, 'clinical_findings', 10000, $errors);
-        $treatmentPlan = specialistOptionalText($input, 'treatment_plan', 10000, $errors);
+        $treatmentPlan = specialistRequiredText(
+            $input,
+            'treatment_plan',
+            'Treatment plan',
+            10000,
+            $errors
+        );
         $therapyEnabled = $input['refer_for_therapy'] ?? false;
         if (!is_bool($therapyEnabled)) {
             $errors['refer_for_therapy'] = 'Choose whether a therapy referral is required.';
@@ -413,9 +488,9 @@ function handleSpecialistReferralOutcome(string $referralId): void
         );
         $amount = $input['outside_tests_amount'] ?? null;
         if ((!is_string($amount) && !is_int($amount) && !is_float($amount))
-            || !preg_match('/^\d{1,10}(?:\.\d{1,2})?$/', (string) $amount)
+            || !preg_match('/^\d{1,8}(?:\.\d{1,2})?$/', (string) $amount)
             || (float) $amount <= 0) {
-            $errors['outside_tests_amount'] = 'Enter an amount greater than 0 with up to 2 decimals.';
+            $errors['outside_tests_amount'] = 'Enter an amount from 0.01 to 99999999.99 with up to 2 decimals.';
         } else {
             $outsideAmount = number_format((float) $amount, 2, '.', '');
         }
@@ -513,91 +588,63 @@ function handleSpecialistReferralOutcome(string $referralId): void
                 );
             }
             if ($therapyEnabled) {
-                $therapyInsert = $database->prepare(
-                    'INSERT INTO therapy_referrals
-                        (visit_id, source_consultation_id, diagnosis_id,
-                         referred_by_user_id, therapy_type, reason)
-                     VALUES
-                        (:visit_id, :consultation_id, :diagnosis_id,
-                         :specialist_id, :therapy_type, :reason)'
+                createClinicalTherapyReferral(
+                    $database,
+                    (int) $referral['visit_id'],
+                    $responseConsultationId,
+                    $diagnosisId,
+                    (int) $user['user_id'],
+                    $therapyType,
+                    $therapyReason
                 );
-                $therapyInsert->execute([
-                    'visit_id' => (int) $referral['visit_id'],
-                    'consultation_id' => $responseConsultationId,
-                    'diagnosis_id' => $diagnosisId,
-                    'specialist_id' => (int) $user['user_id'],
-                    'therapy_type' => $therapyType,
-                    'reason' => $therapyReason,
-                ]);
             }
-            $nextStatus = $therapyEnabled
-                ? 'awaiting_therapy'
-                : ($items !== [] ? 'awaiting_pharmacy' : 'completed');
+            $nextStatus = doctorNextStatusAfterDiagnosis(
+                $database,
+                (int) $referral['visit_id']
+            );
         } else {
             $outsideInsert = $database->prepare(
                 'INSERT INTO outside_referrals
-                    (visit_id, source_consultation_id, provider_name,
+                    (visit_id, source_consultation_id, specialist_referral_id, provider_name,
                      clinical_summary, outside_tests_payable, status)
                  VALUES
-                    (:visit_id, :consultation_id, :provider_name,
+                    (:visit_id, :consultation_id, :specialist_referral_id, :provider_name,
                      :clinical_summary, 1, \'issued\')'
             );
             $outsideInsert->execute([
                 'visit_id' => (int) $referral['visit_id'],
                 'consultation_id' => $responseConsultationId,
+                'specialist_referral_id' => (int) $referralId,
                 'provider_name' => $providerName,
                 'clinical_summary' => $clinicalSummary,
             ]);
             $outsideReferralId = (int) $database->lastInsertId();
 
-            $feeStatement = $database->prepare(
-                'SELECT fee_id, description, is_active
-                 FROM fee_catalog
-                 WHERE fee_code = \'OUTSIDE_TESTS_MANUAL\'
-                 LIMIT 1
-                 FOR UPDATE'
-            );
-            $feeStatement->execute();
-            $fee = $feeStatement->fetch();
-            if ($fee === false || (int) $fee['is_active'] !== 1) {
-                throw new RuntimeException('The outside-tests manual fee is unavailable.');
-            }
             $bill = billingGetOrCreateBill($database, (int) $referral['visit_id']);
             if ($bill['status'] === 'cancelled' || $bill['status'] === 'paid') {
                 throw new RuntimeException('The visit bill is already closed.');
             }
-            $existingItem = $database->prepare(
-                'SELECT bill_item_id
-                 FROM bill_items
-                 WHERE bill_id = :bill_id
-                   AND outside_referral_id = :outside_referral_id
-                 LIMIT 1
-                 FOR UPDATE'
+            billingAddFeeItemOnce(
+                $database,
+                (int) $bill['bill_id'],
+                'OUTSIDE_TESTS_MANUAL',
+                'outside_referral',
+                null,
+                null,
+                null,
+                $outsideReferralId,
+                $outsideAmount,
+                $providerName
             );
-            $existingItem->execute([
-                'bill_id' => (int) $bill['bill_id'],
-                'outside_referral_id' => $outsideReferralId,
-            ]);
-            if ($existingItem->fetchColumn() !== false) {
-                throw new RuntimeException('This outside referral charge already exists.');
-            }
-            $itemInsert = $database->prepare(
-                'INSERT INTO bill_items
-                    (bill_id, fee_id, charge_type, description,
-                     quantity, unit_amount, outside_referral_id)
-                 VALUES
-                    (:bill_id, :fee_id, \'outside_referral\', :description,
-                     1.00, :unit_amount, :outside_referral_id)'
-            );
-            $itemInsert->execute([
-                'bill_id' => (int) $bill['bill_id'],
-                'fee_id' => (int) $fee['fee_id'],
-                'description' => $fee['description'] . ' - ' . $providerName,
-                'unit_amount' => $outsideAmount,
-                'outside_referral_id' => $outsideReferralId,
-            ]);
             billingRefreshBillTotal($database, (int) $bill['bill_id']);
             $nextStatus = 'awaiting_payment';
+            specialistRecordAudit(
+                $database,
+                (int) $user['user_id'],
+                'specialist.outside_referral.created',
+                (int) $referral['patient_id'],
+                (int) $referral['visit_id']
+            );
         }
 
         $referralUpdate = $database->prepare(
@@ -670,10 +717,13 @@ function handleSpecialistOutsideReferralGet(string $outsideReferralId): void
     $user = requireSpecialistAccess($database);
     $statement = $database->prepare(
         'SELECT outside_referral.outside_referral_id, outside_referral.visit_id,
+                outside_referral.specialist_referral_id,
                 outside_referral.provider_name, outside_referral.clinical_summary,
                 outside_referral.outside_tests_payable, outside_referral.status,
                 outside_referral.created_at, visit.patient_id, patient.patient_number,
                 patient.first_name, patient.last_name,
+                specialist_referral.reason AS referral_reason,
+                source_diagnosis.diagnosis_description,
                 consultation.consultation_id, consultation.clinician_user_id,
                 issuer.display_name AS issuer_name
          FROM outside_referrals outside_referral
@@ -682,6 +732,12 @@ function handleSpecialistOutsideReferralGet(string $outsideReferralId): void
          INNER JOIN consultations consultation
             ON consultation.consultation_id = outside_referral.source_consultation_id
          INNER JOIN users issuer ON issuer.user_id = consultation.clinician_user_id
+         LEFT JOIN specialist_referrals specialist_referral
+            ON specialist_referral.specialist_referral_id =
+               outside_referral.specialist_referral_id
+         LEFT JOIN diagnoses source_diagnosis
+            ON source_diagnosis.consultation_id =
+               specialist_referral.source_consultation_id
          WHERE outside_referral.outside_referral_id = :outside_referral_id
          LIMIT 1'
     );
@@ -692,17 +748,25 @@ function handleSpecialistOutsideReferralGet(string $outsideReferralId): void
     }
 
     if ($user['role_name'] !== 'system_administrator') {
+        $assignmentCondition = $referral['specialist_referral_id'] === null
+            ? 'response_consultation_id = :consultation_id AND visit_id = :visit_id'
+            : 'specialist_referral_id = :specialist_referral_id';
         $assignedStatement = $database->prepare(
             'SELECT 1
              FROM specialist_referrals
-             WHERE visit_id = :visit_id
+             WHERE ' . $assignmentCondition . '
                AND specialist_user_id = :specialist_user_id
              LIMIT 1'
         );
-        $assignedStatement->execute([
-            'visit_id' => (int) $referral['visit_id'],
-            'specialist_user_id' => (int) $user['user_id'],
-        ]);
+        $assignedParameters = ['specialist_user_id' => (int) $user['user_id']];
+        if ($referral['specialist_referral_id'] === null) {
+            $assignedParameters['consultation_id'] = (int) $referral['consultation_id'];
+            $assignedParameters['visit_id'] = (int) $referral['visit_id'];
+        } else {
+            $assignedParameters['specialist_referral_id'] =
+                (int) $referral['specialist_referral_id'];
+        }
+        $assignedStatement->execute($assignedParameters);
         if ($assignedStatement->fetchColumn() === false) {
             jsonError('This outside referral is not assigned to you.', [], 403);
         }
@@ -724,6 +788,8 @@ function handleSpecialistOutsideReferralGet(string $outsideReferralId): void
             'outside_tests_payable' => (bool) $referral['outside_tests_payable'],
             'created_at' => $referral['created_at'],
             'issued_by' => $referral['issuer_name'],
+            'referral_reason' => $referral['referral_reason'],
+            'diagnosis_description' => $referral['diagnosis_description'],
         ],
         'patient' => [
             'patient_number' => $referral['patient_number'],

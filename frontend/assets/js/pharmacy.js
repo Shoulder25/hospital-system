@@ -3,7 +3,12 @@
 (() => {
     const projectBase = document.body.dataset.basePath || '';
     const apiEntry = new URL(`${projectBase}/backend/index.php`, window.location.origin);
-    const state = { csrfToken: '', visits: [], selectedVisitId: null, visit: null };
+    const state = {
+        csrfToken: '',
+        visits: [],
+        selectedVisitId: null,
+        visit: null,
+    };
     const messageElement = document.querySelector('[data-pharmacy-message]');
 
     async function request(route, options = {}) {
@@ -97,6 +102,31 @@
         return Number.isFinite(amount) ? amount.toFixed(2) : '0.00';
     }
 
+    function createUuid() {
+        if (window.crypto.randomUUID) return window.crypto.randomUUID();
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    }
+
+    function paymentRequestKey(visitId) {
+        return `hospital.pharmacy.payment.${visitId}`;
+    }
+
+    function getPaymentRequestId(visitId) {
+        const key = paymentRequestKey(visitId);
+        const existing = window.sessionStorage.getItem(key);
+        if (existing && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(existing)) {
+            return existing;
+        }
+        const requestId = createUuid();
+        window.sessionStorage.setItem(key, requestId);
+        return requestId;
+    }
+
     function renderQueue() {
         const list = document.querySelector('[data-pharmacy-queue]');
         list.replaceChildren();
@@ -118,6 +148,11 @@
             );
             patient.title = visit.patient_number || '';
             addText(button, 'span', `Visit #${visit.visit_id} · ${visit.status.replaceAll('_', ' ')}`);
+            addText(
+                button,
+                'small',
+                `Bill ${visit.bill_status.replaceAll('_', ' ')} · Due ${money(visit.balance)} · ${visit.prescription_count} active prescription${visit.prescription_count === 1 ? '' : 's'}`
+            );
             if (visit.is_emergency) addText(button, 'span', 'Emergency · deferred charges', 'pharmacy-card-tag');
             if (visit.medication_collection_only) addText(button, 'span', 'Medication collection only', 'pharmacy-card-tag');
             addText(button, 'small', formattedDate(visit.arrived_at));
@@ -167,6 +202,7 @@
                 ? `Dispensed ${formattedDate(prescription.dispensed_at)}`
                 : `${prescription.status.replaceAll('_', ' ')} · Visit #${prescription.prescription_visit_id}`);
             card.appendChild(heading);
+            addText(card, 'small', `Prescribed by ${prescription.prescribed_by}`);
             const tableWrap = document.createElement('div');
             tableWrap.className = 'pharmacy-table-wrap';
             const table = document.createElement('table');
@@ -257,6 +293,33 @@
         });
     }
 
+    function renderDispensings(dispensings) {
+        const container = document.querySelector('[data-dispensings]');
+        container.replaceChildren();
+        if (dispensings.length === 0) {
+            addText(container, 'p', 'No dispensing records for this visit.', 'pharmacy-record-empty');
+            return;
+        }
+        dispensings.forEach((dispensing) => {
+            const record = document.createElement('article');
+            record.className = 'pharmacy-dispensing-record';
+            addText(
+                record,
+                'strong',
+                `Dispensing #${dispensing.dispensing_id} · ${formattedDate(dispensing.dispensed_at)}`
+            );
+            addText(record, 'small', `Pharmacist: ${dispensing.pharmacist_name}`);
+            dispensing.items.forEach((item) => {
+                addText(
+                    record,
+                    'span',
+                    `${item.medicine_name} · ${item.quantity_dispensed} dispensed`
+                );
+            });
+            container.appendChild(record);
+        });
+    }
+
     function renderAvailablePrescriptions(prescriptions) {
         const section = document.querySelector('[data-available-section]');
         const select = document.querySelector('[data-prescription-select]');
@@ -292,6 +355,33 @@
             option.textContent = scheme.scheme_name;
             select.appendChild(option);
         });
+        select.selectedIndex = 0;
+    }
+
+    function populateMemberships(memberships) {
+        const select = document.querySelector('[data-membership-select]');
+        select.replaceChildren();
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = memberships.length
+            ? 'Enter a different membership'
+            : 'No saved memberships';
+        select.appendChild(placeholder);
+        memberships.forEach((membership) => {
+            const option = document.createElement('option');
+            option.value = String(membership.membership_id);
+            option.dataset.schemeId = String(membership.medical_aid_scheme_id);
+            option.dataset.memberNumber = membership.member_number;
+            option.dataset.memberName = membership.member_name;
+            option.textContent =
+                `${membership.scheme_name} · ${membership.member_number} (${membership.member_name})`;
+            select.appendChild(option);
+        });
+        select.selectedIndex = 0;
+        const form = document.querySelector('[data-payment-form]');
+        form.elements.medical_aid_scheme_id.selectedIndex = 0;
+        form.elements.member_number.value = '';
+        form.elements.member_name.value = '';
     }
 
     async function openVisit(visitId, setSelection = true) {
@@ -301,7 +391,16 @@
         }
         try {
             state.visit = await parseRequest(`/api/pharmacy/visits/${visitId}`);
-            const { visit, bill, prescriptions, available_prescriptions, payments, medical_aid_schemes } = state.visit;
+            const {
+                visit,
+                bill,
+                prescriptions,
+                available_prescriptions,
+                payments,
+                dispensings,
+                medical_aid_schemes,
+                medical_aid_memberships,
+            } = state.visit;
             document.querySelector('[data-visit-heading]').textContent =
                 `${visit.patient_name || 'Patient'} · Visit #${visit.visit_id}`;
             document.querySelector('[data-visit-subheading]').textContent =
@@ -312,8 +411,10 @@
             renderPrescriptions(prescriptions);
             renderBill(bill);
             renderPayments(payments);
+            renderDispensings(dispensings);
             renderAvailablePrescriptions(available_prescriptions);
             populateSchemes(medical_aid_schemes);
+            populateMemberships(medical_aid_memberships);
             const activeUndispensed = prescriptions.some(
                 (prescription) => prescription.status === 'active' && !prescription.is_dispensed
             );
@@ -362,30 +463,35 @@
         if (!state.selectedVisitId) return;
         const form = event.currentTarget;
         if (!form.reportValidity()) return;
-        const body = {
-            payment_method: form.elements.payment_method.value,
-            amount: form.elements.amount.value,
-        };
-        if (body.payment_method === 'medical_aid') {
-            body.medical_aid_scheme_id = Number(form.elements.medical_aid_scheme_id.value);
-            body.member_number = form.elements.member_number.value.trim();
-            body.member_name = form.elements.member_name.value.trim();
-        }
+        const requestVisitId = state.selectedVisitId;
         const button = form.querySelector('[data-take-payment]');
         button.disabled = true;
         try {
-            const data = await parseRequest(`/api/pharmacy/visits/${state.selectedVisitId}/payments`, {
+            const body = {
+                payment_method: form.elements.payment_method.value,
+                amount: form.elements.amount.value,
+                client_request_id: getPaymentRequestId(requestVisitId),
+            };
+            if (body.payment_method === 'medical_aid') {
+                body.medical_aid_scheme_id = Number(form.elements.medical_aid_scheme_id.value);
+                body.member_number = form.elements.member_number.value.trim();
+                body.member_name = form.elements.member_name.value.trim();
+            }
+            const data = await parseRequest(`/api/pharmacy/visits/${requestVisitId}/payments`, {
                 method: 'POST',
                 body: JSON.stringify(body),
             });
+            window.sessionStorage.removeItem(paymentRequestKey(requestVisitId));
             showMessage(
                 `Payment recorded${data.is_simulated ? ' (simulated approval)' : ''}. Balance due: ${money(data.balance)}.`,
                 'success'
             );
-            const visitId = state.selectedVisitId;
-            await loadQueue(document.querySelector('#pharmacy-search').value, visitId);
+            await loadQueue(document.querySelector('#pharmacy-search').value, requestVisitId);
             window.open(`receipt.php?payment_id=${encodeURIComponent(data.payment_id)}`, '_blank', 'noopener');
         } catch (error) {
+            if (error.status === 409) {
+                window.sessionStorage.removeItem(paymentRequestKey(requestVisitId));
+            }
             showMessage(error.message);
         } finally {
             button.disabled = false;
@@ -445,6 +551,24 @@
             appendReceiptCell(row, money(item.line_total));
             tbody.appendChild(row);
         });
+        const priorPayments = document.querySelector('[data-receipt-prior-payments]');
+        priorPayments.replaceChildren();
+        data.prior_payments.forEach((payment) => {
+            const row = document.createElement('tr');
+            appendReceiptCell(row, payment.receipt_number || `Payment #${payment.payment_id}`);
+            appendReceiptCell(row, payment.payment_method.replaceAll('_', ' '));
+            appendReceiptCell(row, money(payment.amount));
+            appendReceiptCell(row, payment.status);
+            appendReceiptCell(row, formattedDate(payment.paid_at));
+            priorPayments.appendChild(row);
+        });
+        document.querySelector('[data-prior-payments-section]').hidden =
+            data.prior_payments.length === 0;
+        document.querySelector('[data-receipt-total]').textContent = money(data.bill.total_amount);
+        document.querySelector('[data-receipt-approved]').textContent =
+            money(data.bill.approved_payments);
+        document.querySelector('[data-receipt-balance]').textContent =
+            money(data.bill.remaining_balance);
         document.querySelector('[data-receipt]').hidden = false;
     }
 
@@ -472,6 +596,14 @@
             'change',
             updateMedicalAidFields
         );
+        document.querySelector('[data-membership-select]')?.addEventListener('change', (event) => {
+            const option = event.currentTarget.selectedOptions[0];
+            if (!option.value) return;
+            const form = document.querySelector('[data-payment-form]');
+            form.elements.medical_aid_scheme_id.value = option.dataset.schemeId;
+            form.elements.member_number.value = option.dataset.memberNumber;
+            form.elements.member_name.value = option.dataset.memberName;
+        });
         document.querySelector('[data-dispense]')?.addEventListener('click', dispenseMedication);
         document.querySelector('[data-print]')?.addEventListener('click', () => window.print());
         try {

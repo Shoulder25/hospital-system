@@ -52,7 +52,7 @@ $initial = $initialMatch[0] ?? 'T';
                 <div class="admin-notice" data-therapy-message role="status" aria-live="polite" hidden></div>
                 <div class="therapy-layout">
                     <section class="admin-panel therapy-queue-panel" aria-labelledby="queue-heading">
-                        <div class="admin-panel-heading"><div><h2 id="queue-heading">Awaiting therapy</h2><p>Active referrals with visit status awaiting therapy</p></div><button class="button button-outline button-small" type="button" data-refresh>Refresh</button></div>
+                        <div class="admin-panel-heading"><div><h2 id="queue-heading">All therapy referrals</h2><p>Active referrals and completed session history</p></div><button class="button button-outline button-small" type="button" data-refresh>Refresh</button></div>
                         <div class="therapy-queue" data-therapy-list><p class="therapy-empty">Loading therapy referrals…</p></div>
                     </section>
                     <section class="admin-panel therapy-record-panel" data-record-panel hidden>
@@ -66,9 +66,19 @@ $initial = $initialMatch[0] ?? 'T';
                                 <dl class="therapy-details">
                                     <div><dt>Therapy type</dt><dd data-therapy-type>—</dd></div>
                                     <div><dt>Reason</dt><dd data-referral-reason>—</dd></div>
+                                    <div><dt>Referred by</dt><dd data-referrer>—</dd></div>
                                     <div><dt>Diagnosis</dt><dd data-diagnosis>—</dd></div>
                                     <div><dt>Clinical findings</dt><dd data-findings>—</dd></div>
                                     <div><dt>Treatment plan</dt><dd data-treatment-plan>—</dd></div>
+                                </dl>
+                            </section>
+                            <section class="therapy-record-section">
+                                <h3>Referring clinical notes</h3>
+                                <dl class="therapy-details">
+                                    <div><dt>Presenting complaint</dt><dd data-presenting-complaint>—</dd></div>
+                                    <div><dt>Clinical observations</dt><dd data-clinical-observations>—</dd></div>
+                                    <div><dt>Examination findings</dt><dd data-examination-findings>—</dd></div>
+                                    <div><dt>Consultation notes</dt><dd data-consultation-notes>—</dd></div>
                                 </dl>
                             </section>
                             <section class="therapy-record-section">
@@ -78,7 +88,7 @@ $initial = $initialMatch[0] ?? 'T';
                             <section class="therapy-record-section therapy-actions">
                                 <form class="therapy-session-form" data-session-form>
                                     <h3>Record a session</h3>
-                                    <label class="therapy-field"><span>Session notes <small>(optional)</small></span><textarea name="session_notes" rows="3" maxlength="5000" placeholder="Add brief fictional session notes"></textarea></label>
+                                    <label class="therapy-field"><span>Session notes</span><textarea name="session_notes" rows="3" maxlength="5000" required placeholder="Describe the therapy performed and patient response"></textarea></label>
                                     <button class="button button-primary" type="submit" data-record-session>Save session</button>
                                 </form>
                                 <div class="therapy-complete">

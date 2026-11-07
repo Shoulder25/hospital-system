@@ -58,9 +58,13 @@ the supplied therapy type and reason.
 
 Prescriptions require an active medicine and a diagnosis linked to the
 consultation. This module creates prescription records only; it does not
-dispense medicines or add payment approvals. A prescription routes the visit
-to `awaiting_pharmacy`, where the pharmacy/payment workflow remains
-responsible for authorization before dispensing.
+dispense medicines or add payment approvals. After a diagnosis, an active
+therapy referral takes priority and routes the visit to `awaiting_therapy`,
+even when a prescription is also present. Without an active therapy referral,
+an active prescription routes the visit to `awaiting_pharmacy`; with neither,
+the visit becomes `completed`. Adding a prescription through the separate API
+uses the same priority, so it cannot bypass an active therapy referral.
+Therapy completion then routes an active prescription to `awaiting_pharmacy`.
 
 ## XAMPP and Postman tests
 

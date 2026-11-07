@@ -36,7 +36,7 @@ does not treat the proposal as final. Routes are dispatched through
 | Specialist | `POST /api/specialist/referrals` | `POST /api/diagnoses` | Created as a doctor diagnosis/decision; no direct matching route |
 | Specialist | `POST /api/specialist/consultations` | `POST /api/specialists/referrals/{id}/outcome` | Consultation/outcome combined |
 | Specialist | `POST /api/specialist/diagnoses` | `POST /api/specialists/referrals/{id}/outcome` | Diagnosis/outcome combined |
-| Therapy | `GET /api/therapy/appointments` | `GET /api/therapy/queue` | Implemented; different path |
+| Therapy | `GET /api/therapy/appointments` | `GET /api/therapy/queue`; `GET /api/therapy/referrals/{id}` | Implemented; different paths |
 | Therapy | `POST /api/therapy/appointments` | `POST /api/diagnoses` | Doctor diagnosis can create a therapy referral |
 | Therapy | `POST /api/therapy/records` | `POST /api/therapy/referrals/{id}/sessions` | Implemented; different path |
 | Pharmacy | `GET /api/prescriptions` | `GET /api/pharmacy/queue`, `GET /api/pharmacy/visits/{id}` | Visit-scoped; no global prescriptions route |
@@ -46,15 +46,23 @@ does not treat the proposal as final. Routes are dispatched through
 | Billing | `POST /api/bills` | — | Bills are created within ticket/pharmacy/therapy workflows |
 | Billing | `POST /api/payments` | `POST /api/billing/visits/{id}/ticket-payment`; `POST /api/pharmacy/visits/{id}/payments` | Separate ticket and pharmacy paths |
 | Billing | `GET /api/payments/{id}` | `GET /api/billing/payments/{id}/receipt`; `GET /api/pharmacy/payments/{id}/receipt` | Role-specific receipt routes |
+| Emergency | No corresponding route identified in the supplied proposal | `GET /api/emergency/queue`; `GET /api/emergency/visits/{id}`; `POST /api/emergency/visits/{id}/encounter`; `POST /api/emergency/visits/{id}/nurses`; `POST /api/emergency/visits/{id}/prescription`; `POST /api/emergency/visits/{id}/finish` | Current emergency paths are provisional |
 
 Additional current routes include health/session helpers, admin roles/audit
 log/reports, visit status, reception dashboard/organizations,
 `GET /api/billing/ticket-queue` (with `/api/billing/queue` retained as an alias),
 `GET /api/billing/visits/{id}` for cashier ticket-payment details, nursing and
 doctor dashboards/queues, department order routing/start actions,
-specialist accept/outside-referral details, therapy completion, medication-only
-prescription selection, and pharmacy receipts. See `backend/routes/api.php` for
-the exact route patterns and methods.
+specialist accept/outside-referral details, therapy completion,
+`GET /api/pharmacy/visits/{id}/dispensings` for dispensing history,
+medication-only prescription selection, and pharmacy receipts. Pharmacy
+payment requests require a client UUID for idempotent retries. See
+`backend/routes/api.php` for the exact route patterns and methods.
+
+The Therapy API also provides `GET /api/therapy/referrals/{id}` for an
+authorized referral's clinical record and session history. Session writes use
+a client request UUID so retries do not duplicate a session or its linked bill
+item.
 
 Doctor record reads use `GET /api/doctor/visits/{id}` and
 `GET /api/doctor/visits/{id}/history`. Nursing uses
@@ -63,5 +71,6 @@ Doctor writes use `POST /api/consultations`, `/api/diagnoses`, and
 `/api/prescriptions`; the diagnosis request carries the selected test,
 specialist-referral, or therapy next step.
 
-No emergency department page/API routes are implemented. Emergency-related
-schema and reception fields do not provide an end-to-end emergency module.
+Emergency Department routes and workflow are described in `EMERGENCY.md`.
+All current endpoint paths remain provisional until Person 3's specification
+is reconciled.

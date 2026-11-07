@@ -1,0 +1,50 @@
+.emergency-content { display: grid; gap: 20px; }
+.emergency-welcome { align-items: flex-end; margin-bottom: 0; }
+.emergency-welcome h1 { margin: 0 0 8px; font-size: clamp(26px, 3vw, 34px); letter-spacing: -1px; }
+.emergency-badge { flex: 0 0 auto; border: 1px solid #f1dfb8; border-radius: 999px; padding: 8px 12px; background: #fff8e9; color: #825d17; font-size: 10px; font-weight: 800; letter-spacing: .07em; }
+.emergency-panel-heading { align-items: flex-end; }
+.emergency-search { display: grid; min-width: min(100%, 300px); gap: 6px; }
+.emergency-search label { color: #536a71; font-size: 11px; font-weight: 700; }
+.emergency-search > div { display: flex; gap: 7px; }
+.emergency-search input { width: 100%; min-width: 0; min-height: 37px; border: 1px solid #dfe7e8; border-radius: 7px; padding: 0 10px; color: #30494f; font: inherit; font-size: 11px; }
+.emergency-search .button { flex: 0 0 auto; }
+.emergency-table-wrap { width: 100%; overflow-x: auto; }
+.emergency-table { min-width: 780px; }
+.emergency-table td strong, .emergency-table td small { display: block; }
+.emergency-table td small { margin-top: 4px; color: #819095; font-size: 10px; }
+.emergency-status { display: inline-flex; border-radius: 999px; padding: 5px 9px; background: #fff4dc; color: #8a5a08; font-size: 11px; font-weight: 700; text-transform: capitalize; }
+.emergency-status-in_progress { background: #e8f1ff; color: #315b91; }
+.emergency-status-not_started { background: #f0f3f4; color: #536a71; }
+.emergency-detail[hidden] { display: none; }
+.emergency-detail { display: grid; gap: 18px; }
+.emergency-detail .admin-panel-heading { align-items: flex-start; }
+.emergency-detail h2 { margin: 2px 0 5px; }
+.emergency-detail .admin-panel-heading p:last-child { margin: 0; color: #647a83; }
+.emergency-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 24px; margin: 0; }
+.emergency-facts dt { margin-bottom: 4px; color: #7c8d92; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.emergency-facts dd { margin: 0; color: #30494f; font-size: 13px; font-weight: 600; }
+.emergency-temp-note { margin: 0; border-radius: 8px; padding: 12px; background: #fff8e9; color: #725421; font-size: 12px; line-height: 1.6; }
+.emergency-temp-note a { color: #245c72; font-weight: 700; }
+.emergency-encounter-notes { margin: 0; border-radius: 8px; padding: 12px; background: #f3f7f8; color: #415a63; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
+.emergency-subsection { display: grid; gap: 12px; border-top: 1px solid #e8eef0; padding-top: 17px; }
+.emergency-subsection h3 { margin: 0; color: #30494f; font-size: 15px; }
+.emergency-subsection > p, .emergency-detail-actions p { margin: 0; color: #647a83; font-size: 12px; line-height: 1.6; }
+.emergency-form { display: grid; gap: 12px; max-width: 760px; }
+.emergency-form label { display: grid; gap: 6px; color: #536a71; font-size: 11px; font-weight: 700; }
+.emergency-form input, .emergency-form select, .emergency-form textarea { width: 100%; min-height: 38px; border: 1px solid #dbe5e6; border-radius: 7px; padding: 8px 10px; color: #30494f; background: #fff; font: inherit; font-size: 12px; }
+.emergency-form textarea { resize: vertical; }
+.emergency-form .button { justify-self: start; }
+.emergency-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.emergency-inline-form { display: flex; align-items: end; flex-wrap: wrap; }
+.emergency-inline-form label { min-width: min(100%, 280px); }
+.emergency-nurse-list, .emergency-prescription-list { display: grid; gap: 6px; margin: 0; padding-left: 20px; color: #30494f; font-size: 12px; }
+.emergency-detail-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid #e8eef0; padding-top: 17px; }
+@media (max-width: 760px) {
+    .emergency-panel-heading { align-items: stretch; flex-direction: column; }
+    .emergency-search { min-width: 0; }
+    .emergency-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+    .emergency-facts, .emergency-form-grid { grid-template-columns: 1fr; }
+    .emergency-inline-form { display: grid; }
+}

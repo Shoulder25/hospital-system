@@ -46,7 +46,16 @@ $escape = static function ($value): string {
                         <div><dt>Payment status</dt><dd data-receipt-status></dd></div>
                     </dl>
                     <div class="pharmacy-receipt-table-wrap"><table class="admin-table"><thead><tr><th scope="col">Charge</th><th scope="col">Description</th><th scope="col">Qty</th><th scope="col">Unit amount</th><th scope="col">Line total</th></tr></thead><tbody data-receipt-items></tbody></table></div>
+                    <section class="pharmacy-prior-payments" data-prior-payments-section hidden>
+                        <h2>Previous payments on this bill</h2>
+                        <div class="pharmacy-receipt-table-wrap"><table class="admin-table"><thead><tr><th scope="col">Receipt</th><th scope="col">Method</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Date</th></tr></thead><tbody data-receipt-prior-payments></tbody></table></div>
+                    </section>
                     <div class="pharmacy-receipt-total"><span>Payment received</span><strong data-receipt-amount></strong></div>
+                    <dl class="pharmacy-receipt-balance">
+                        <div><dt>Consolidated bill total</dt><dd data-receipt-total></dd></div>
+                        <div><dt>Total approved payments</dt><dd data-receipt-approved></dd></div>
+                        <div><dt>Current remaining balance</dt><dd data-receipt-balance></dd></div>
+                    </dl>
                     <p class="pharmacy-note">Card and medical-aid approvals shown here are simulated. Retain the receipt with the visit record.</p>
                 </article>
             </section>

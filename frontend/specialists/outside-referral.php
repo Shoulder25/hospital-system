@@ -46,6 +46,8 @@ $escape = static function ($value): string {
                         <div><dt>Referral date</dt><dd data-letter-date></dd></div>
                         <div><dt>Issued by</dt><dd data-letter-issuer></dd></div>
                     </dl>
+                    <section class="outside-letter-summary" data-letter-reason-section hidden><h2>Referral reason</h2><p data-letter-reason></p></section>
+                    <section class="outside-letter-summary" data-letter-diagnosis-section hidden><h2>Relevant diagnosis</h2><p data-letter-diagnosis></p></section>
                     <section class="outside-letter-summary"><h2>Clinical summary</h2><p data-letter-summary></p></section>
                     <p class="outside-letter-note">The patient is responsible for outside test costs. This document contains fictional/sample clinical data for an academic prototype.</p>
                 </article>

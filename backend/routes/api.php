@@ -18,6 +18,7 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/admin/reports' => ['GET'],
         '/api/visits/status' => ['GET'],
         '/api/billing/ticket-queue' => ['GET'],
+        '/api/emergency/queue' => ['GET'],
         '/api/reception/dashboard' => ['GET'],
         '/api/reception/organizations' => ['GET'],
         '/api/reception/patients' => ['GET', 'POST'],
@@ -62,6 +63,8 @@ function dispatchApiRequest(string $method, string $path): void
     $pharmacyVisitId = null;
     $pharmacyAction = null;
     $pharmacyPaymentId = null;
+    $emergencyVisitId = null;
+    $emergencyAction = null;
 
     if (preg_match('#^/api/admin/users/([0-9]+)/status$#', $path, $matches)) {
         $statusUserId = $matches[1];
@@ -129,13 +132,13 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = ['GET'];
     }
     if (preg_match(
-        '#^/api/specialists/referrals/([0-9]+)/(accept|outcome)$#',
+        '#^/api/specialists/referrals/([0-9]+)(?:/(accept|outcome))?$#',
         $path,
         $matches
     )) {
         $specialistReferralId = $matches[1];
-        $specialistReferralAction = $matches[2];
-        $routes[$path] = ['POST'];
+        $specialistReferralAction = $matches[2] ?? '';
+        $routes[$path] = $specialistReferralAction === '' ? ['GET'] : ['POST'];
     }
     if (preg_match(
         '#^/api/specialists/outside-referrals/([0-9]+)$#',
@@ -146,22 +149,24 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = ['GET'];
     }
     if (preg_match(
-        '#^/api/therapy/referrals/([0-9]+)/(sessions|complete)$#',
+        '#^/api/therapy/referrals/([0-9]+)(?:/(sessions|complete))?$#',
         $path,
         $matches
     )) {
         $therapyReferralId = $matches[1];
-        $therapyAction = $matches[2];
-        $routes[$path] = ['POST'];
+        $therapyAction = $matches[2] ?? '';
+        $routes[$path] = $therapyAction === '' ? ['GET'] : ['POST'];
     }
     if (preg_match(
-        '#^/api/pharmacy/visits/([0-9]+)(?:/(prescription|payments|dispense))?$#',
+        '#^/api/pharmacy/visits/([0-9]+)(?:/(prescription|payments|dispense|dispensings))?$#',
         $path,
         $matches
     )) {
         $pharmacyVisitId = $matches[1];
         $pharmacyAction = $matches[2] ?? '';
-        $routes[$path] = $pharmacyAction === '' ? ['GET'] : ['POST'];
+        $routes[$path] = in_array($pharmacyAction, ['', 'dispensings'], true)
+            ? ['GET']
+            : ['POST'];
     }
     if (preg_match(
         '#^/api/pharmacy/payments/([0-9]+)/receipt$#',
@@ -170,6 +175,15 @@ function dispatchApiRequest(string $method, string $path): void
     )) {
         $pharmacyPaymentId = $matches[1];
         $routes[$path] = ['GET'];
+    }
+    if (preg_match(
+        '#^/api/emergency/visits/([0-9]+)(?:/(encounter|nurses|prescription|finish))?$#',
+        $path,
+        $matches
+    )) {
+        $emergencyVisitId = $matches[1];
+        $emergencyAction = $matches[2] ?? '';
+        $routes[$path] = $emergencyAction === '' ? ['GET'] : ['POST'];
     }
 
     if (!isset($routes[$path])) {
@@ -302,11 +316,25 @@ function dispatchApiRequest(string $method, string $path): void
             }
         } elseif ($billingPaymentId !== null) {
             handleBillingReceiptGet($billingPaymentId);
+        } elseif ($emergencyVisitId !== null) {
+            if ($emergencyAction === 'encounter') {
+                handleEmergencyEncounterCreate($emergencyVisitId);
+            } elseif ($emergencyAction === 'nurses') {
+                handleEmergencyNurseAssign($emergencyVisitId);
+            } elseif ($emergencyAction === 'prescription') {
+                handleEmergencyPrescriptionCreate($emergencyVisitId);
+            } elseif ($emergencyAction === 'finish') {
+                handleEmergencyFinish($emergencyVisitId);
+            } else {
+                handleEmergencyVisitGet($emergencyVisitId);
+            }
         } elseif ($specialistReferralId !== null) {
             if ($specialistReferralAction === 'accept') {
                 handleSpecialistReferralAccept($specialistReferralId);
-            } else {
+            } elseif ($specialistReferralAction === 'outcome') {
                 handleSpecialistReferralOutcome($specialistReferralId);
+            } else {
+                handleSpecialistReferralGet($specialistReferralId);
             }
         } elseif ($outsideReferralId !== null) {
             handleSpecialistOutsideReferralGet($outsideReferralId);
@@ -315,11 +343,21 @@ function dispatchApiRequest(string $method, string $path): void
         } elseif ($therapyReferralId !== null) {
             if ($therapyAction === 'sessions') {
                 handleTherapySessionCreate($therapyReferralId);
-            } else {
+            } elseif ($therapyAction === 'complete') {
                 handleTherapyComplete($therapyReferralId);
+            } else {
+                handleTherapyReferralGet($therapyReferralId);
             }
         } elseif ($path === '/api/therapy/queue') {
             handleTherapyQueueGet();
+        } elseif ($path === '/api/emergency/queue') {
+            $search = $_GET['search'] ?? '';
+            if (!is_string($search)) {
+                jsonError('Search text must be a string.', [
+                    'search' => 'Enter plain text to search.',
+                ], 422);
+            }
+            handleEmergencyQueueGet($search);
         } elseif ($pharmacyVisitId !== null) {
             if ($pharmacyAction === 'prescription') {
                 handlePharmacyPrescriptionSelect($pharmacyVisitId);
@@ -327,6 +365,8 @@ function dispatchApiRequest(string $method, string $path): void
                 handlePharmacyPaymentCreate($pharmacyVisitId);
             } elseif ($pharmacyAction === 'dispense') {
                 handlePharmacyDispense($pharmacyVisitId);
+            } elseif ($pharmacyAction === 'dispensings') {
+                handlePharmacyDispensingHistoryGet($pharmacyVisitId);
             } else {
                 handlePharmacyVisitGet($pharmacyVisitId);
             }

@@ -174,6 +174,21 @@
 
         const content = document.querySelector('[data-record]');
         content.replaceChildren();
+        const patientSection = document.createElement('section');
+        patientSection.className = 'specialist-record-section';
+        addText(patientSection, 'h3', 'Patient details');
+        addText(patientSection, 'strong', 'Name');
+        addText(patientSection, 'p', details.patient.name);
+        addText(patientSection, 'strong', 'Patient number');
+        addText(patientSection, 'p', details.patient.patient_number);
+        addText(patientSection, 'strong', 'Date of birth');
+        addText(patientSection, 'p', details.patient.date_of_birth || '—');
+        addText(patientSection, 'strong', 'Gender');
+        addText(patientSection, 'p', details.patient.gender || '—');
+        if (details.patient.is_temporary) {
+            addText(patientSection, 'p', 'Temporary patient record.');
+        }
+        content.appendChild(patientSection);
         const reasonSection = document.createElement('section');
         reasonSection.className = 'specialist-record-section';
         addText(reasonSection, 'h3', 'Referral');
@@ -372,6 +387,14 @@
             document.querySelector('[data-letter-date]').textContent = formattedDate(referral.created_at);
             document.querySelector('[data-letter-issuer]').textContent = referral.issued_by;
             document.querySelector('[data-letter-summary]').textContent = referral.clinical_summary;
+            const reasonSection = document.querySelector('[data-letter-reason-section]');
+            const diagnosisSection = document.querySelector('[data-letter-diagnosis-section]');
+            reasonSection.hidden = !referral.referral_reason;
+            diagnosisSection.hidden = !referral.diagnosis_description;
+            document.querySelector('[data-letter-reason]').textContent =
+                referral.referral_reason || '';
+            document.querySelector('[data-letter-diagnosis]').textContent =
+                referral.diagnosis_description || '';
             document.querySelector('[data-outside-letter]').hidden = false;
         } catch (error) {
             showMessage(error.message);

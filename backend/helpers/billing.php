@@ -74,7 +74,11 @@ function billingAddFeeItemOnce(
     string $feeCode,
     string $chargeType,
     ?int $testOrderId = null,
-    ?int $therapySessionId = null
+    ?int $therapySessionId = null,
+    ?int $emergencyEncounterId = null,
+    ?int $outsideReferralId = null,
+    ?string $manualAmount = null,
+    ?string $descriptionSuffix = null
 ): array {
     $feeStatement = $database->prepare(
         'SELECT fee_id, fee_code, description, default_amount, is_demo
@@ -85,8 +89,33 @@ function billingAddFeeItemOnce(
     );
     $feeStatement->execute(['fee_code' => $feeCode]);
     $fee = $feeStatement->fetch();
-    if ($fee === false || (float) $fee['default_amount'] <= 0) {
+    if ($fee === false) {
         throw new RuntimeException('The required active fee is missing or invalid.');
+    }
+    if ($manualAmount !== null
+        && ($chargeType !== 'outside_referral'
+            || $feeCode !== 'OUTSIDE_TESTS_MANUAL'
+            || $outsideReferralId === null
+            || !preg_match('/^\d{1,8}(?:\.\d{1,2})?$/', $manualAmount)
+            || (float) $manualAmount <= 0)) {
+        throw new RuntimeException('The manual outside-referral amount is invalid.');
+    }
+    if ($chargeType === 'outside_referral'
+        && ($outsideReferralId === null || $manualAmount === null)) {
+        throw new RuntimeException('An outside-referral charge needs its referral and amount.');
+    }
+    if ($outsideReferralId !== null && $chargeType !== 'outside_referral') {
+        throw new RuntimeException(
+            'An outside referral can only be linked to an outside-referral charge.'
+        );
+    }
+    $unitAmount = $manualAmount ?? (string) $fee['default_amount'];
+    if ((float) $unitAmount <= 0) {
+        throw new RuntimeException('The required active fee is missing or invalid.');
+    }
+    $description = (string) $fee['description'];
+    if ($descriptionSuffix !== null && trim($descriptionSuffix) !== '') {
+        $description .= ' - ' . trim($descriptionSuffix);
     }
 
     if ($testOrderId !== null && $chargeType !== 'test') {
@@ -95,11 +124,21 @@ function billingAddFeeItemOnce(
     if ($therapySessionId !== null && $chargeType !== 'therapy') {
         throw new RuntimeException('A therapy session can only be linked to a therapy charge.');
     }
+    if ($emergencyEncounterId !== null && $chargeType !== 'emergency') {
+        throw new RuntimeException(
+            'An emergency encounter can only be linked to an emergency charge.'
+        );
+    }
     if ($chargeType === 'therapy' && $therapySessionId === null) {
         throw new RuntimeException('A therapy charge must be linked to a therapy session.');
     }
-    if ($testOrderId !== null && $therapySessionId !== null) {
-        throw new RuntimeException('A bill item cannot link both a test order and therapy session.');
+    if ($chargeType === 'emergency' && $emergencyEncounterId === null) {
+        throw new RuntimeException('An emergency charge must be linked to an encounter.');
+    }
+    if (($testOrderId !== null && $therapySessionId !== null)
+        || ($emergencyEncounterId !== null
+            && ($testOrderId !== null || $therapySessionId !== null))) {
+        throw new RuntimeException('A bill item cannot link multiple workflow records.');
     }
 
     $existingSql = 'SELECT bill_item_id, fee_id, description, quantity, unit_amount
@@ -110,6 +149,12 @@ function billingAddFeeItemOnce(
     }
     if ($therapySessionId !== null) {
         $existingSql .= ' AND therapy_session_id = :therapy_session_id';
+    }
+    if ($emergencyEncounterId !== null) {
+        $existingSql .= ' AND emergency_encounter_id = :emergency_encounter_id';
+    }
+    if ($outsideReferralId !== null) {
+        $existingSql .= ' AND outside_referral_id = :outside_referral_id';
     }
     $existingSql .= ' ORDER BY bill_item_id LIMIT 1 FOR UPDATE';
     $existingStatement = $database->prepare($existingSql);
@@ -123,10 +168,18 @@ function billingAddFeeItemOnce(
     if ($therapySessionId !== null) {
         $existingParameters['therapy_session_id'] = $therapySessionId;
     }
+    if ($emergencyEncounterId !== null) {
+        $existingParameters['emergency_encounter_id'] = $emergencyEncounterId;
+    }
+    if ($outsideReferralId !== null) {
+        $existingParameters['outside_referral_id'] = $outsideReferralId;
+    }
     $existingStatement->execute($existingParameters);
     $existing = $existingStatement->fetch();
     if ($existing !== false) {
-        if ((int) $existing['fee_id'] !== (int) $fee['fee_id']) {
+        if ((int) $existing['fee_id'] !== (int) $fee['fee_id']
+            || number_format((float) $existing['unit_amount'], 2, '.', '')
+                !== number_format((float) $unitAmount, 2, '.', '')) {
             throw new RuntimeException('A different fee is already recorded for this charge.');
         }
 
@@ -143,27 +196,31 @@ function billingAddFeeItemOnce(
     $insert = $database->prepare(
         'INSERT INTO bill_items
             (bill_id, fee_id, charge_type, description, quantity, unit_amount,
-             test_order_id, therapy_session_id)
+             test_order_id, therapy_session_id, emergency_encounter_id,
+             outside_referral_id)
          VALUES
             (:bill_id, :fee_id, :charge_type, :description, 1.00, :unit_amount,
-             :test_order_id, :therapy_session_id)'
+             :test_order_id, :therapy_session_id, :emergency_encounter_id,
+             :outside_referral_id)'
     );
     $insert->execute([
         'bill_id' => $billId,
         'fee_id' => (int) $fee['fee_id'],
         'charge_type' => $chargeType,
-        'description' => $fee['description'],
-        'unit_amount' => $fee['default_amount'],
+        'description' => $description,
+        'unit_amount' => $unitAmount,
         'test_order_id' => $testOrderId,
         'therapy_session_id' => $therapySessionId,
+        'emergency_encounter_id' => $emergencyEncounterId,
+        'outside_referral_id' => $outsideReferralId,
     ]);
 
     return [
         'bill_item_id' => (int) $database->lastInsertId(),
         'fee_id' => (int) $fee['fee_id'],
-        'description' => $fee['description'],
+        'description' => $description,
         'quantity' => '1.00',
-        'unit_amount' => (string) $fee['default_amount'],
+        'unit_amount' => $unitAmount,
         'created' => true,
     ];
 }

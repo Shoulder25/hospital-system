@@ -42,10 +42,15 @@ requests receive HTTP 401. State-changing requests require the existing
 important actions are recorded in `audit_log`.
 
 The testing desk only routes orders created by nursing or the doctor. A
-technician can start a routed order and save one final result. Results append to
-the original order; retesting must create a new order and leaves the previous
-order/result intact. Completed results are available to the doctor, who remains
-responsible for interpretation and diagnosis.
+technician can start a routed order and save one final result. Saving the result,
+completing the order, adding its linked test bill item, refreshing the bill
+total, and recording the audit entry happen in one transaction. The charge is
+read from the active `fee_catalog` entry for the test type: `TEST_BLOOD_DEMO`,
+`TEST_GLUCOSE_DEMO`, `TEST_URINE_DEMO`, `TEST_PREGNANCY_DEMO`,
+`TEST_PAP_SMEAR_DEMO`, `TEST_X_RAY_DEMO`, or `TEST_ECG_DEMO`. Retesting must
+create a new order; each order receives its own charge, while previous orders,
+results, and charges remain intact. Completed results are available to the
+doctor, who remains responsible for interpretation and diagnosis.
 
 ## API
 

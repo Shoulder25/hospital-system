@@ -3,7 +3,12 @@
 (() => {
     const projectBase = document.body.dataset.basePath || '';
     const apiEntry = new URL(`${projectBase}/backend/index.php`, window.location.origin);
-    const state = { csrfToken: '', referrals: [], selectedId: null };
+    const state = {
+        csrfToken: '',
+        referrals: [],
+        selectedId: null,
+        pendingSessionRequest: null,
+    };
     const messageElement = document.querySelector('[data-therapy-message]');
 
     async function request(route, options = {}) {
@@ -93,13 +98,23 @@
         }).format(date);
     }
 
+    function createSessionRequestId() {
+        if (window.crypto.randomUUID) return window.crypto.randomUUID();
+
+        const bytes = window.crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const value = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+        return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+    }
+
     function renderQueue() {
         const list = document.querySelector('[data-therapy-list]');
         list.replaceChildren();
         document.querySelector('[data-therapy-count]').textContent =
             `${state.referrals.length} referral${state.referrals.length === 1 ? '' : 's'}`;
         if (state.referrals.length === 0) {
-            addText(list, 'p', 'No active therapy referrals are awaiting service.', 'therapy-empty');
+            addText(list, 'p', 'No therapy referrals are available.', 'therapy-empty');
             return;
         }
         state.referrals.forEach((referral) => {
@@ -115,7 +130,11 @@
                 'therapy-card-patient'
             );
             patient.title = referral.patient_number || '';
-            addText(button, 'span', `Visit #${referral.visit_id} · ${referral.therapy_type}`);
+            addText(
+                button,
+                'span',
+                `Visit #${referral.visit_id} · ${referral.therapy_type} · ${referral.status.replaceAll('_', ' ')}`
+            );
             addText(button, 'span', referral.referral_reason, 'therapy-card-reason');
             addText(button, 'small', formattedDate(referral.created_at));
             list.appendChild(button);
@@ -132,12 +151,22 @@
         status.className = `therapy-status therapy-status-${referral.status}`;
         document.querySelector('[data-therapy-type]').textContent = referral.therapy_type || '—';
         document.querySelector('[data-referral-reason]').textContent = referral.referral_reason || '—';
+        document.querySelector('[data-referrer]').textContent =
+            `${referral.referrer.name} (${referral.referrer.role.replaceAll('_', ' ')})`;
         document.querySelector('[data-diagnosis]').textContent =
             referral.diagnosis.description || 'No diagnosis text recorded.';
         document.querySelector('[data-findings]').textContent =
             referral.diagnosis.clinical_findings || '—';
         document.querySelector('[data-treatment-plan]').textContent =
             referral.diagnosis.treatment_plan || '—';
+        document.querySelector('[data-presenting-complaint]').textContent =
+            referral.consultation.presenting_complaint || '—';
+        document.querySelector('[data-clinical-observations]').textContent =
+            referral.consultation.clinical_observations || '—';
+        document.querySelector('[data-examination-findings]').textContent =
+            referral.consultation.examination_findings || '—';
+        document.querySelector('[data-consultation-notes]').textContent =
+            referral.consultation.notes || '—';
 
         const sessions = document.querySelector('[data-sessions]');
         sessions.replaceChildren();
@@ -153,7 +182,11 @@
                 sessions.appendChild(card);
             });
         }
-        document.querySelector('[data-complete]').disabled = referral.sessions.length === 0;
+        const canUpdate = referral.visit_status === 'awaiting_therapy'
+            && ['referred', 'in_progress'].includes(referral.status);
+        document.querySelector('[data-session-form]').hidden = !canUpdate;
+        document.querySelector('[data-complete]').disabled =
+            !canUpdate || referral.sessions.length === 0;
         document.querySelector('[data-record-panel]').hidden = false;
     }
 
@@ -191,17 +224,30 @@
     async function recordSession(event) {
         event.preventDefault();
         if (!state.selectedId) return;
+        const form = event.currentTarget;
+        if (!form.reportValidity()) return;
         const button = document.querySelector('[data-record-session]');
         button.disabled = true;
+        if (!state.pendingSessionRequest
+            || state.pendingSessionRequest.referralId !== state.selectedId) {
+            state.pendingSessionRequest = {
+                referralId: state.selectedId,
+                requestId: createSessionRequestId(),
+            };
+        }
         try {
-            await parseRequest(`/api/therapy/referrals/${state.selectedId}/sessions`, {
+            const result = await parseRequest(`/api/therapy/referrals/${state.selectedId}/sessions`, {
                 method: 'POST',
                 body: JSON.stringify({
-                    session_notes: event.currentTarget.elements.session_notes.value.trim(),
+                    client_request_id: state.pendingSessionRequest.requestId,
+                    session_notes: form.elements.session_notes.value.trim(),
                 }),
             });
-            event.currentTarget.reset();
-            showMessage('Session recorded and added to the visit bill.', 'success');
+            state.pendingSessionRequest = null;
+            form.reset();
+            showMessage(result.created
+                ? 'Session recorded and added to the visit bill.'
+                : 'This session had already been recorded; no duplicate charge was added.', 'success');
             await loadQueue(state.selectedId);
         } catch (error) {
             showMessage(error.message);
