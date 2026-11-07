@@ -1,0 +1,68 @@
+.reception-content { max-width: 1540px; }
+.reception-welcome { align-items: center; }
+.reception-date { flex: 0 0 auto; padding: 9px 13px; border: 1px solid #e1e9e9; border-radius: 20px; background: #fff; color: #647a7f; font-size: 11px; }
+.reception-stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 22px; }
+.reception-stat-grid .stat-card { min-height: 137px; }
+.reception-workspace { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); align-items: start; gap: 20px; margin-bottom: 22px; }
+.reception-panel { min-width: 0; }
+.reception-search-form { display: flex; align-items: center; gap: 10px; padding: 16px 18px; }
+.reception-search-field { width: auto; flex: 1 1 auto; min-height: 42px; }
+.reception-search-form > .button { min-height: 42px; padding: 0 18px; font-size: 12px; }
+.reception-table { min-width: 620px; }
+.reception-actions { display: flex; align-items: center; gap: 7px; }
+.reception-select-button { border-color: #c9e5d7; color: #347653; }
+.reception-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; padding: 18px; }
+.temporary-patient-option { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid #f0dfbd; border-radius: 8px; background: #fffaf0; color: #655638; cursor: pointer; }
+.temporary-patient-option input { width: 16px; min-height: 16px; flex: 0 0 auto; margin: 1px 0 0; accent-color: #b1842e; }
+.temporary-patient-option strong, .temporary-patient-option small { display: block; }
+.temporary-patient-option strong { font-size: 11px; }
+.temporary-patient-option small { margin-top: 4px; color: #8a7955; font-size: 10px; line-height: 1.5; }
+.reception-field { min-width: 0; }
+.reception-field label, .visit-type-fieldset legend { display: block; margin: 0 0 7px; color: #415a60; font-size: 11px; font-weight: 700; }
+.reception-field label span { color: #bd4d54; }
+.reception-field input, .reception-field select, .reception-field textarea { width: 100%; min-height: 41px; padding: 9px 11px; border: 1px solid #dbe5e6; border-radius: 7px; outline: none; background: #fff; color: #263f46; font: inherit; font-size: 12px; }
+.reception-field textarea { min-height: 72px; resize: vertical; }
+.reception-field input:focus, .reception-field select:focus, .reception-field textarea:focus { border-color: #3b9c92; box-shadow: 0 0 0 3px rgb(28 139 129 / 11%); }
+.reception-field-wide { grid-column: 1 / -1; }
+.reception-field-wide .button { min-height: 42px; padding: 0 18px; font-size: 12px; }
+.reception-form .button:disabled { cursor: not-allowed; opacity: .58; }
+.visit-panel { margin-bottom: 22px; }
+.selected-patient { display: flex; min-height: 54px; align-items: center; gap: 11px; margin: 16px 18px 0; padding: 10px 13px; border: 1px dashed #d5e0e1; border-radius: 8px; color: #819094; font-size: 12px; }
+.selected-patient.has-patient { border-style: solid; border-color: #c8e3dd; background: #f3faf8; color: #286d64; font-weight: 700; }
+.selected-patient-icon { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 50%; background: #e8f2f1; font-size: 16px; }
+.visit-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.visit-type-fieldset { display: flex; flex-wrap: wrap; grid-column: 1 / -1; gap: 9px 20px; margin: 0; padding: 0 0 13px; border: 0; border-bottom: 1px solid #edf1f2; }
+.visit-type-fieldset legend { width: 100%; }
+.visit-type-fieldset label { display: inline-flex; align-items: center; gap: 7px; color: #526a70; font-size: 11px; cursor: pointer; }
+.visit-type-fieldset input { accent-color: #167e76; }
+.recent-panel { margin-bottom: 22px; }
+.patient-details-panel { margin-bottom: 24px; }
+.patient-details-panel .admin-panel-heading { border-bottom: 0; }
+.patient-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 18px; margin: 0; padding: 0 20px 20px; }
+.patient-detail-grid dt { color: #869397; font-size: 10px; }
+.patient-detail-grid dd { min-width: 0; margin: 3px 0 0; overflow-wrap: anywhere; color: #344d53; font-size: 12px; }
+.patient-details-panel .button { flex: 0 0 auto; min-height: 34px; padding: 0 12px; font-size: 11px; }
+.patient-detail-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+.reception-page .admin-notice { position: sticky; z-index: 3; top: 8px; }
+
+@media (max-width: 1100px) {
+    .reception-workspace { grid-template-columns: 1fr; }
+    .reception-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+    .reception-welcome { align-items: flex-start; }
+    .reception-date { padding: 7px 10px; }
+    .reception-search-form { align-items: stretch; flex-direction: column; padding: 14px; }
+    .reception-search-form > .button { width: 100%; }
+}
+
+@media (max-width: 520px) {
+    .reception-stat-grid { grid-template-columns: 1fr; }
+    .reception-stat-grid .stat-card { min-height: 120px; }
+    .reception-form, .visit-form { grid-template-columns: 1fr; gap: 13px; padding: 15px; }
+    .reception-field-wide, .visit-type-fieldset { grid-column: 1; }
+    .visit-type-fieldset { flex-direction: column; }
+    .patient-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-right: 15px; padding-left: 15px; }
+    .reception-content { padding-right: 13px; padding-left: 13px; }
+}
