@@ -1,0 +1,83 @@
+.nursing-content { max-width: 1580px; }
+.nursing-welcome { align-items: center; }
+.nursing-date { flex: 0 0 auto; padding: 9px 13px; border: 1px solid #e1e9e9; border-radius: 20px; background: #fff; color: #647a7f; font-size: 11px; }
+.nursing-workflow-note { margin: -12px 0 20px; color: #738589; font-size: 11px; line-height: 1.65; }
+.nursing-workflow-note strong { color: #536e73; }
+.nursing-stat-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 22px; }
+.nursing-stat-grid .stat-card { min-height: 132px; }
+.nursing-queue-panel { margin-bottom: 22px; }
+.nursing-queue-heading { align-items: flex-end; }
+.nursing-search { width: min(100%, 270px); min-height: 38px; }
+.nursing-table { min-width: 930px; }
+.nursing-action-cell { min-width: 150px; }
+.nursing-action-cell .status-toggle { white-space: nowrap; }
+.nursing-emergency { color: #9c4146 !important; font-weight: 700; }
+.nursing-assessment-panel { margin-bottom: 28px; }
+.nursing-assessment-panel > .admin-panel-heading { align-items: center; }
+.nursing-assessment-panel > .admin-panel-heading > .button { flex: 0 0 auto; min-height: 35px; padding: 0 13px; font-size: 11px; }
+.nursing-patient-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 18px 20px; background: #fbfdfd; border-bottom: 1px solid #edf1f2; }
+.nursing-summary-item { min-width: 0; }
+.nursing-summary-item span, .nursing-summary-item strong { display: block; }
+.nursing-summary-item span { margin-bottom: 4px; color: #859397; font-size: 10px; }
+.nursing-summary-item strong { overflow-wrap: anywhere; color: #344d53; font-size: 12px; font-weight: 600; text-transform: capitalize; }
+.nursing-history { padding: 19px 0 0; }
+.nursing-subheading { padding: 0 20px 13px; }
+.nursing-subheading h3 { margin: 0 0 5px; color: #314a50; font-size: 14px; letter-spacing: -.2px; }
+.nursing-subheading p { margin: 0; color: #849397; font-size: 11px; line-height: 1.5; }
+.nursing-history-table { min-width: 650px; }
+.nursing-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; padding: 20px; }
+.nursing-form-heading { grid-column: 1 / -1; padding: 3px 0 0; }
+.nursing-field { min-width: 0; }
+.nursing-field-wide { grid-column: 1 / -1; }
+.nursing-field > label, .nursing-field legend, .nursing-outcomes legend, .nursing-test-options legend { display: block; margin: 0 0 7px; color: #415a60; font-size: 11px; font-weight: 700; }
+.nursing-field > label span, .nursing-outcomes legend span { color: #bd4d54; }
+.nursing-field input, .nursing-field textarea, .nursing-field select { width: 100%; min-height: 40px; padding: 9px 11px; border: 1px solid #dbe5e6; border-radius: 7px; outline: none; background: #fff; color: #263f46; font: inherit; font-size: 12px; }
+.nursing-field textarea { min-height: 68px; resize: vertical; }
+.nursing-field input:focus, .nursing-field textarea:focus, .nursing-field select:focus { border-color: #3b9c92; box-shadow: 0 0 0 3px rgb(28 139 129 / 11%); }
+.nursing-field input:disabled, .nursing-field textarea:disabled { background: #f6f8f8; color: #718084; }
+.nursing-bp-field { margin: 0; padding: 0; border: 0; }
+.nursing-bp-field legend { padding: 0; }
+.nursing-bp-inputs { display: flex; align-items: center; gap: 8px; }
+.nursing-bp-inputs label { min-width: 0; flex: 1 1 0; }
+.nursing-bp-inputs span { color: #8a989b; font-size: 17px; }
+.nursing-save-hint { display: inline-block; margin-left: 10px; color: #819094; font-size: 10px; }
+.nursing-form .button { min-height: 41px; padding: 0 17px; font-size: 11px; }
+.nursing-form .button:disabled { cursor: wait; opacity: .6; }
+.nursing-decision-section, .nursing-treatment-section { border-top: 1px solid #edf1f2; padding-top: 19px; }
+.nursing-outcomes, .nursing-test-options { display: flex; grid-column: 1 / -1; flex-wrap: wrap; gap: 10px 20px; margin: 0; padding: 0 0 6px; border: 0; }
+.nursing-outcomes legend, .nursing-test-options legend { width: 100%; }
+.nursing-outcomes label, .nursing-test-options label { display: inline-flex; align-items: center; gap: 7px; color: #526a70; font-size: 11px; cursor: pointer; }
+.nursing-outcomes input, .nursing-test-options input { accent-color: #167e76; }
+.nursing-test-options { padding: 13px; border: 1px solid #e2ebeb; border-radius: 8px; background: #fbfdfd; }
+.nursing-treatment-section > .nursing-subheading { padding-top: 1px; }
+.nursing-treatment-form { padding-top: 0; }
+.treatment-item-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(120px, .35fr) auto; align-items: end; gap: 12px; margin-bottom: 12px; }
+.treatment-item-row label { display: block; color: #415a60; font-size: 10px; font-weight: 700; }
+.treatment-item-row select, .treatment-item-row input { width: 100%; min-height: 40px; margin-top: 6px; padding: 8px 10px; border: 1px solid #dbe5e6; border-radius: 7px; background: #fff; color: #314a50; font: inherit; font-size: 11px; }
+.treatment-item-row .status-toggle { min-height: 39px; }
+.nursing-treatment-form > [data-add-treatment-item] { margin-bottom: 5px; }
+.nursing-page .admin-notice { position: sticky; z-index: 3; top: 8px; }
+
+@media (max-width: 1100px) {
+    .nursing-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .nursing-patient-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+    .nursing-welcome { align-items: flex-start; }
+    .nursing-date { padding: 7px 10px; }
+    .nursing-queue-heading { align-items: stretch; flex-direction: column; }
+    .nursing-search { width: 100%; }
+}
+
+@media (max-width: 520px) {
+    .nursing-stat-grid { grid-template-columns: 1fr; }
+    .nursing-stat-grid .stat-card { min-height: 115px; }
+    .nursing-patient-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 15px; }
+    .nursing-form { grid-template-columns: 1fr; gap: 13px; padding: 15px; }
+    .nursing-form-heading, .nursing-field-wide, .nursing-outcomes, .nursing-test-options { grid-column: 1; }
+    .nursing-outcomes, .nursing-test-options { flex-direction: column; align-items: flex-start; }
+    .treatment-item-row { grid-template-columns: 1fr; }
+    .treatment-item-row .status-toggle { justify-self: start; }
+    .nursing-content { padding-right: 13px; padding-left: 13px; }
+}

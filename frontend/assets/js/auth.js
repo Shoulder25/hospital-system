@@ -255,6 +255,8 @@
     function dashboardForRole(role) {
         if (role === 'system_administrator') return 'frontend/admin/dashboard.php';
         if (role === 'receptionist') return 'frontend/reception/index.php';
+        if (role === 'nurse') return 'frontend/nursing/index.php';
+        if (role === 'general_doctor') return 'frontend/doctor/index.php';
         return 'frontend/dashboard.php';
     }
 
@@ -276,6 +278,12 @@
             });
             document.querySelectorAll('.reception-only').forEach((link) => {
                 link.hidden = !['receptionist', 'system_administrator'].includes(user.role.name);
+            });
+            document.querySelectorAll('.nursing-only').forEach((link) => {
+                link.hidden = !['nurse', 'system_administrator'].includes(user.role.name);
+            });
+            document.querySelectorAll('.doctor-only').forEach((link) => {
+                link.hidden = !['general_doctor', 'system_administrator'].includes(user.role.name);
             });
         } catch (error) {
             window.location.replace(`${projectBase}auth/login.php?message=session-expired`);

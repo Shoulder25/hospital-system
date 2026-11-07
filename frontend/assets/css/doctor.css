@@ -1,0 +1,411 @@
+.doctor-content {
+    display: grid;
+    gap: 24px;
+}
+
+.doctor-welcome {
+    align-items: flex-end;
+}
+
+.doctor-welcome h1 {
+    margin-bottom: 8px;
+}
+
+.doctor-date {
+    flex: 0 0 auto;
+    border: 1px solid #dfe8ec;
+    border-radius: 999px;
+    padding: 9px 14px;
+    color: #47606b;
+    background: #fff;
+    font-size: .85rem;
+    font-weight: 700;
+}
+
+.doctor-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-bottom: 0;
+}
+
+.doctor-panel {
+    min-width: 0;
+    margin: 0;
+}
+
+.doctor-panel .admin-panel-heading {
+    gap: 18px;
+    align-items: flex-end;
+}
+
+.doctor-search input {
+    width: min(300px, 42vw);
+    min-height: 42px;
+    border: 1px solid #d9e3e7;
+    border-radius: 10px;
+    padding: 9px 12px;
+    font: inherit;
+}
+
+.doctor-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.doctor-table {
+    width: 100%;
+    min-width: 900px;
+    border-collapse: collapse;
+}
+
+.doctor-table th,
+.doctor-table td {
+    border-bottom: 1px solid #e8eef0;
+    padding: 13px 12px;
+    text-align: left;
+    vertical-align: middle;
+    font-size: .9rem;
+}
+
+.doctor-table th {
+    color: #617680;
+    font-size: .75rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.doctor-table td {
+    color: #263d47;
+}
+
+.doctor-table .table-message {
+    padding: 28px 12px;
+    color: #667b83;
+    text-align: center;
+}
+
+.doctor-visit-emergency {
+    color: #a32925 !important;
+    font-weight: 700;
+}
+
+.doctor-status {
+    display: inline-flex;
+    border-radius: 999px;
+    padding: 5px 9px;
+    background: #e8f4f3;
+    color: #176f68;
+    font-size: .78rem;
+    font-weight: 700;
+    text-transform: capitalize;
+}
+
+.doctor-record {
+    display: grid;
+    gap: 18px;
+    scroll-margin-top: 20px;
+}
+
+.doctor-record-heading {
+    align-items: center !important;
+}
+
+.doctor-record-heading h2 {
+    margin: 2px 0 4px;
+}
+
+.doctor-record-heading p:last-child {
+    margin: 0;
+    color: #647a83;
+}
+
+.doctor-record-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.doctor-record-card {
+    min-width: 0;
+    border: 1px solid #e2eaed;
+    border-radius: 13px;
+    background: #fbfdfd;
+    padding: 18px;
+}
+
+.doctor-record-card h3 {
+    margin: 0 0 13px;
+    color: #263d47;
+    font-size: 1rem;
+}
+
+.doctor-details {
+    display: grid;
+    grid-template-columns: minmax(110px, .7fr) minmax(0, 1.3fr);
+    gap: 9px 14px;
+    margin: 0;
+    font-size: .88rem;
+}
+
+.doctor-details dt {
+    color: #697f87;
+}
+
+.doctor-details dd {
+    margin: 0;
+    color: #263d47;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.doctor-wide-card {
+    width: 100%;
+}
+
+.doctor-result-list,
+.doctor-history-list {
+    display: grid;
+    gap: 10px;
+}
+
+.doctor-result,
+.doctor-history-item {
+    border: 1px solid #e7edef;
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: #fff;
+}
+
+.doctor-result strong,
+.doctor-history-item strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #263d47;
+}
+
+.doctor-result p,
+.doctor-history-item p,
+.doctor-empty {
+    margin: 4px 0 0;
+    color: #617680;
+    font-size: .88rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.doctor-form {
+    display: grid;
+    gap: 16px;
+    border-top: 1px solid #e6edef;
+    padding-top: 20px;
+}
+
+.doctor-form-heading h3 {
+    margin: 0 0 4px;
+    color: #263d47;
+}
+
+.doctor-form-heading p,
+.doctor-subheading p {
+    margin: 0;
+    color: #647a83;
+    font-size: .88rem;
+}
+
+.doctor-form label {
+    display: grid;
+    gap: 7px;
+    color: #334d57;
+    font-size: .9rem;
+    font-weight: 650;
+}
+
+.doctor-form label b {
+    color: #bc3b35;
+}
+
+.doctor-form input:not([type="checkbox"]),
+.doctor-form select,
+.doctor-form textarea {
+    width: 100%;
+    border: 1px solid #d9e3e7;
+    border-radius: 9px;
+    padding: 10px 12px;
+    color: #263d47;
+    background: #fff;
+    font: inherit;
+    font-weight: 400;
+}
+
+.doctor-form input:focus,
+.doctor-form select:focus,
+.doctor-form textarea:focus,
+.doctor-search input:focus {
+    outline: 3px solid rgba(32, 139, 128, .15);
+    border-color: #238a80;
+}
+
+.doctor-form textarea {
+    resize: vertical;
+}
+
+.doctor-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.doctor-inline-field {
+    max-width: 420px;
+}
+
+.doctor-checkbox {
+    grid-template-columns: 20px 1fr !important;
+    align-items: center;
+}
+
+.doctor-checkbox input {
+    width: 17px;
+    height: 17px;
+    accent-color: #16877d;
+}
+
+.doctor-prescription {
+    display: grid;
+    gap: 12px;
+    border: 1px solid #e4ecef;
+    border-radius: 12px;
+    padding: 15px;
+    background: #f9fbfc;
+}
+
+.doctor-subheading,
+.doctor-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.doctor-subheading h4 {
+    margin: 0 0 4px;
+    color: #263d47;
+}
+
+.doctor-prescription-items {
+    display: grid;
+    gap: 12px;
+}
+
+.doctor-prescription-item {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    border-top: 1px solid #e2eaed;
+    padding-top: 12px;
+}
+
+.doctor-prescription-item .doctor-medicine-field {
+    grid-column: span 2;
+}
+
+.doctor-prescription-item .doctor-instructions-field {
+    grid-column: span 2;
+}
+
+.doctor-prescription-item .doctor-remove-item {
+    align-self: end;
+}
+
+.doctor-test-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    border: 1px solid #d9e3e7;
+    border-radius: 10px;
+    padding: 14px;
+}
+
+.doctor-test-options legend {
+    padding: 0 6px;
+    color: #334d57;
+    font-weight: 700;
+}
+
+.doctor-test-options label {
+    display: inline-flex;
+    grid-template-columns: none;
+    align-items: center;
+    gap: 6px;
+    font-weight: 500;
+}
+
+.doctor-test-options input {
+    accent-color: #16877d;
+}
+
+.doctor-test-options p {
+    flex-basis: 100%;
+    margin: 0;
+    color: #667b83;
+    font-size: .82rem;
+}
+
+.doctor-referral-fields {
+    display: grid;
+    gap: 14px;
+}
+
+.doctor-content [hidden] {
+    display: none !important;
+}
+
+.doctor-content .button-small {
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: .82rem;
+}
+
+@media (max-width: 1100px) {
+    .doctor-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 720px) {
+    .doctor-welcome {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .doctor-stat-grid,
+    .doctor-record-grid,
+    .doctor-form-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .doctor-panel .admin-panel-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .doctor-search input {
+        width: 100%;
+    }
+
+    .doctor-prescription-item {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .doctor-prescription-item .doctor-medicine-field,
+    .doctor-prescription-item .doctor-instructions-field {
+        grid-column: span 2;
+    }
+
+    .doctor-subheading,
+    .doctor-form-actions {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}

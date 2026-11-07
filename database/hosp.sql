@@ -148,6 +148,8 @@ CREATE TABLE IF NOT EXISTS nurse_assessments (
     visit_id INT UNSIGNED NOT NULL,
     nurse_user_id INT UNSIGNED NOT NULL,
     complaint TEXT NULL,
+    symptoms TEXT NULL,
+    symptom_duration VARCHAR(100) NULL,
     blood_pressure VARCHAR(20) NULL,
     pulse SMALLINT UNSIGNED NULL,
     temperature DECIMAL(5,2) NULL,
@@ -156,7 +158,7 @@ CREATE TABLE IF NOT EXISTS nurse_assessments (
     weight DECIMAL(6,2) NULL,
     height DECIMAL(6,2) NULL,
     notes TEXT NULL,
-    decision ENUM('minor_illness', 'tests', 'general_doctor') NOT NULL,
+    decision ENUM('minor_illness', 'tests', 'general_doctor') NULL DEFAULT NULL,
     minor_treatment_notes TEXT NULL,
     assessed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (assessment_id),
@@ -247,6 +249,9 @@ CREATE TABLE IF NOT EXISTS consultations (
     visit_id INT UNSIGNED NOT NULL,
     clinician_user_id INT UNSIGNED NOT NULL,
     consultation_type ENUM('emergency', 'general', 'specialist') NOT NULL,
+    presenting_complaint TEXT NULL,
+    clinical_observations TEXT NULL,
+    examination_findings TEXT NULL,
     notes TEXT NULL,
     diagnosis_made TINYINT(1) NOT NULL DEFAULT 0,
     diagnosis_text TEXT NULL,
@@ -268,6 +273,29 @@ CREATE TABLE IF NOT EXISTS consultations (
         FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
     CONSTRAINT fk_consultations_clinician
         FOREIGN KEY (clinician_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS diagnoses (
+    diagnosis_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    visit_id INT UNSIGNED NOT NULL,
+    consultation_id INT UNSIGNED NOT NULL,
+    diagnosed_by_user_id INT UNSIGNED NOT NULL,
+    diagnosis_made TINYINT(1) NOT NULL DEFAULT 1,
+    diagnosis_description TEXT NULL,
+    clinical_findings TEXT NULL,
+    treatment_plan TEXT NULL,
+    notes TEXT NULL,
+    diagnosed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (diagnosis_id),
+    KEY idx_diagnoses_visit (visit_id, diagnosed_at),
+    KEY idx_diagnoses_consultation (consultation_id),
+    KEY idx_diagnoses_clinician (diagnosed_by_user_id),
+    CONSTRAINT fk_diagnoses_visit
+        FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
+    CONSTRAINT fk_diagnoses_consultation
+        FOREIGN KEY (consultation_id) REFERENCES consultations (consultation_id),
+    CONSTRAINT fk_diagnoses_clinician
+        FOREIGN KEY (diagnosed_by_user_id) REFERENCES users (user_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS specialist_referrals (
@@ -324,7 +352,9 @@ CREATE TABLE IF NOT EXISTS therapy_referrals (
     therapy_referral_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     visit_id INT UNSIGNED NOT NULL,
     source_consultation_id INT UNSIGNED NOT NULL,
+    diagnosis_id INT UNSIGNED NULL,
     referred_by_user_id INT UNSIGNED NOT NULL,
+    therapy_type VARCHAR(100) NOT NULL,
     reason TEXT NOT NULL,
     status ENUM('referred', 'in_progress', 'completed', 'cancelled')
         NOT NULL DEFAULT 'referred',
@@ -333,6 +363,9 @@ CREATE TABLE IF NOT EXISTS therapy_referrals (
     KEY idx_therapy_referrals_visit (visit_id, created_at),
     CONSTRAINT fk_therapy_referrals_visit
         FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
+    CONSTRAINT fk_therapy_referrals_diagnosis
+        FOREIGN KEY (diagnosis_id) REFERENCES diagnoses (diagnosis_id)
+        ON DELETE SET NULL,
     CONSTRAINT fk_therapy_referrals_consultation
         FOREIGN KEY (source_consultation_id)
         REFERENCES consultations (consultation_id),
@@ -359,6 +392,8 @@ CREATE TABLE IF NOT EXISTS therapy_sessions (
 CREATE TABLE IF NOT EXISTS prescriptions (
     prescription_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     visit_id INT UNSIGNED NOT NULL,
+    consultation_id INT UNSIGNED NULL,
+    diagnosis_id INT UNSIGNED NULL,
     prescribed_by_user_id INT UNSIGNED NOT NULL,
     status ENUM('draft', 'active', 'completed', 'cancelled', 'expired')
         NOT NULL DEFAULT 'active',
@@ -366,8 +401,16 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     PRIMARY KEY (prescription_id),
     KEY idx_prescriptions_visit (visit_id, created_at),
     KEY idx_prescriptions_status (status),
+    KEY idx_prescriptions_consultation (consultation_id),
+    KEY idx_prescriptions_diagnosis (diagnosis_id),
     CONSTRAINT fk_prescriptions_visit
         FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
+    CONSTRAINT fk_prescriptions_consultation
+        FOREIGN KEY (consultation_id) REFERENCES consultations (consultation_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_prescriptions_diagnosis
+        FOREIGN KEY (diagnosis_id) REFERENCES diagnoses (diagnosis_id)
+        ON DELETE SET NULL,
     CONSTRAINT fk_prescriptions_prescribed_by
         FOREIGN KEY (prescribed_by_user_id) REFERENCES users (user_id)
 ) ENGINE=InnoDB;

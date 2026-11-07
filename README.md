@@ -12,21 +12,25 @@ Starter scaffold for the CSC411 mini-project (school project, functional-first, 
 Source documents are in `docs/source/`.
 
 ## Important
-The database schema, PDO health check, authentication, administration module,
-and reception/patient registration module are implemented. Other hospital
-workflow and department modules are still in progress; `.gitkeep` files only
-preserve empty folders.
+The database schema, PDO health check, authentication, administration,
+reception/patient registration, and nursing assessment modules are implemented.
+Other hospital workflow and department modules are still in progress;
+`.gitkeep` files only preserve empty folders.
 
 ## Backend and authentication
 The root `index.php` introduces the project and links to staff sign-in. The
 login page is `auth/login.php`; public registration is disabled, and
 `frontend/signup.php` displays that notice;
 the staff dashboard is `frontend/dashboard.php`. Reception staff use
-`frontend/reception/index.php`; administrator pages are under
-`frontend/admin/`. The API entry point is `backend/index.php`.
+`frontend/reception/index.php`; nurses use `frontend/nursing/index.php`;
+administrator pages are under `frontend/admin/`. The API entry point is
+`backend/index.php`.
 API endpoints are provisional
 until reconciled with Person 3's specification. Configure the database
 environment and create the initial administrator as described in
 [`docs/AUTHENTICATION.md`](./docs/AUTHENTICATION.md). Reception setup, API
 routes, workflow status rules, and Postman tests are in
-[`docs/RECEPTION.md`](./docs/RECEPTION.md).
+[`docs/RECEPTION.md`](./docs/RECEPTION.md). Nursing schema migration, API
+contracts and test steps are in [`docs/NURSING.md`](./docs/NURSING.md).
+General doctor schema migration, clinical workflow, API contracts and test
+steps are in [`docs/DOCTOR.md`](./docs/DOCTOR.md).

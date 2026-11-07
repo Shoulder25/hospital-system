@@ -12,6 +12,8 @@ require_once __DIR__ . '/middleware/auth.php';
 require_once __DIR__ . '/controllers/auth.php';
 require_once __DIR__ . '/controllers/admin.php';
 require_once __DIR__ . '/controllers/reception.php';
+require_once __DIR__ . '/controllers/nursing.php';
+require_once __DIR__ . '/controllers/doctor.php';
 require_once __DIR__ . '/routes/api.php';
 
 try {

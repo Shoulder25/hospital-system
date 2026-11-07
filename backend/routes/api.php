@@ -18,9 +18,20 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/reception/organizations' => ['GET'],
         '/api/reception/patients' => ['GET', 'POST'],
         '/api/reception/visits' => ['POST'],
+        '/api/nursing/dashboard' => ['GET'],
+        '/api/nursing/queue' => ['GET'],
+        '/api/doctor/dashboard' => ['GET'],
+        '/api/doctor/queue' => ['GET'],
+        '/api/consultations' => ['POST'],
+        '/api/diagnoses' => ['POST'],
+        '/api/prescriptions' => ['POST'],
     ];
     $statusUserId = null;
     $patientId = null;
+    $nursingVisitId = null;
+    $nursingVisitAction = null;
+    $doctorVisitId = null;
+    $doctorVisitAction = null;
 
     if (preg_match('#^/api/admin/users/([0-9]+)/status$#', $path, $matches)) {
         $statusUserId = $matches[1];
@@ -29,6 +40,26 @@ function dispatchApiRequest(string $method, string $path): void
     if (preg_match('#^/api/reception/patients/([0-9]+)$#', $path, $matches)) {
         $patientId = $matches[1];
         $routes[$path] = ['GET', 'PATCH'];
+    }
+    if (preg_match(
+        '#^/api/nursing/visits/([0-9]+)(?:/(assessment|decision|minor-treatment))?$#',
+        $path,
+        $matches
+    )) {
+        $nursingVisitId = $matches[1];
+        $nursingVisitAction = $matches[2] ?? '';
+        $routes[$path] = $nursingVisitAction === ''
+            ? ['GET']
+            : ['POST'];
+    }
+    if (preg_match(
+        '#^/api/doctor/visits/([0-9]+)(?:/(history))?$#',
+        $path,
+        $matches
+    )) {
+        $doctorVisitId = $matches[1];
+        $doctorVisitAction = $matches[2] ?? '';
+        $routes[$path] = ['GET'];
     }
 
     if (!isset($routes[$path])) {
@@ -82,6 +113,12 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/reception/dashboard' => 'handleReceptionDashboard',
         '/api/reception/organizations' => 'handleReceptionOrganizations',
         '/api/reception/visits' => 'handleReceptionVisitCreate',
+        '/api/nursing/dashboard' => 'handleNursingDashboard',
+        '/api/doctor/dashboard' => 'handleDoctorDashboard',
+        '/api/doctor/queue' => 'handleDoctorQueue',
+        '/api/consultations' => 'handleDoctorConsultationCreate',
+        '/api/diagnoses' => 'handleDoctorDiagnosisCreate',
+        '/api/prescriptions' => 'handleDoctorPrescriptionCreate',
     ];
 
     try {
@@ -117,8 +154,43 @@ function dispatchApiRequest(string $method, string $path): void
             } else {
                 handleReceptionPatientComplete($patientId);
             }
+        } elseif ($nursingVisitId !== null) {
+            if ($nursingVisitAction === '') {
+                handleNursingVisitGet($nursingVisitId);
+            } elseif ($nursingVisitAction === 'assessment') {
+                handleNursingAssessmentSave($nursingVisitId);
+            } elseif ($nursingVisitAction === 'decision') {
+                handleNursingDecision($nursingVisitId);
+            } else {
+                handleNursingMinorTreatment($nursingVisitId);
+            }
+        } elseif ($doctorVisitId !== null) {
+            if ($doctorVisitAction === 'history') {
+                handleDoctorVisitHistory($doctorVisitId);
+            } else {
+                handleDoctorVisitGet($doctorVisitId);
+            }
+        } elseif ($path === '/api/doctor/queue') {
+            $search = $_GET['search'] ?? '';
+            if (!is_string($search)) {
+                jsonError('Search text must be a string.', [
+                    'search' => 'Enter plain text to search.',
+                ], 422);
+            }
+            handleDoctorQueue($search);
+        } elseif ($path === '/api/nursing/queue') {
+            $search = $_GET['search'] ?? '';
+            if (!is_string($search)) {
+                jsonError('Search text must be a string.', [
+                    'search' => 'Enter plain text to search.',
+                ], 422);
+            }
+            handleNursingQueue($search);
         } else {
-            $handler = $handlers[$path];
+            $handler = $handlers[$path] ?? null;
+            if (!is_string($handler)) {
+                jsonError('API route not found.', [], 404);
+            }
             $handler();
         }
     } catch (PDOException $exception) {

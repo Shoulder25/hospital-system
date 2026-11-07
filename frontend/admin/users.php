@@ -36,6 +36,7 @@ $escape = static function ($value): string {
                 <a class="side-link" href="dashboard.php"><span aria-hidden="true">⌂</span> Overview</a>
                 <a class="side-link active" href="users.php"><span aria-hidden="true">♙</span> Staff accounts</a>
                 <a class="side-link" href="../reception/index.php"><span aria-hidden="true">⌕</span> Reception desk</a>
+                <a class="side-link" href="../nursing/index.php"><span aria-hidden="true">＋</span> Nursing</a>
             </nav>
             <div class="sidebar-bottom">
                 <div class="sidebar-help">
