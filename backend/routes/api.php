@@ -25,6 +25,13 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/consultations' => ['POST'],
         '/api/diagnoses' => ['POST'],
         '/api/prescriptions' => ['POST'],
+        '/api/testing-desk/orders' => ['GET'],
+        '/api/laboratory/orders' => ['GET'],
+        '/api/laboratory/results' => ['POST'],
+        '/api/radiology/orders' => ['GET'],
+        '/api/radiology/results' => ['POST'],
+        '/api/cardiac/orders' => ['GET'],
+        '/api/cardiac/results' => ['POST'],
     ];
     $statusUserId = null;
     $patientId = null;
@@ -32,6 +39,10 @@ function dispatchApiRequest(string $method, string $path): void
     $nursingVisitAction = null;
     $doctorVisitId = null;
     $doctorVisitAction = null;
+    $testingDeskOrderId = null;
+    $testingDepartment = null;
+    $testingOrderId = null;
+    $testingAction = null;
 
     if (preg_match('#^/api/admin/users/([0-9]+)/status$#', $path, $matches)) {
         $statusUserId = $matches[1];
@@ -60,6 +71,24 @@ function dispatchApiRequest(string $method, string $path): void
         $doctorVisitId = $matches[1];
         $doctorVisitAction = $matches[2] ?? '';
         $routes[$path] = ['GET'];
+    }
+    if (preg_match(
+        '#^/api/testing-desk/orders/([0-9]+)/route$#',
+        $path,
+        $matches
+    )) {
+        $testingDeskOrderId = $matches[1];
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/(laboratory|radiology|cardiac)/orders/([0-9]+)/start$#',
+        $path,
+        $matches
+    )) {
+        $testingDepartment = $matches[1];
+        $testingOrderId = $matches[2];
+        $testingAction = 'start';
+        $routes[$path] = ['POST'];
     }
 
     if (!isset($routes[$path])) {
@@ -119,6 +148,13 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/consultations' => 'handleDoctorConsultationCreate',
         '/api/diagnoses' => 'handleDoctorDiagnosisCreate',
         '/api/prescriptions' => 'handleDoctorPrescriptionCreate',
+        '/api/testing-desk/orders' => 'handleTestingOrdersGet',
+        '/api/laboratory/orders' => 'handleTestingOrdersGet',
+        '/api/laboratory/results' => 'handleTestingResultCreate',
+        '/api/radiology/orders' => 'handleTestingOrdersGet',
+        '/api/radiology/results' => 'handleTestingResultCreate',
+        '/api/cardiac/orders' => 'handleTestingOrdersGet',
+        '/api/cardiac/results' => 'handleTestingResultCreate',
     ];
 
     try {
@@ -170,6 +206,39 @@ function dispatchApiRequest(string $method, string $path): void
             } else {
                 handleDoctorVisitGet($doctorVisitId);
             }
+        } elseif ($testingDeskOrderId !== null) {
+            handleTestingDeskRoute($testingDeskOrderId);
+        } elseif ($testingOrderId !== null && $testingAction === 'start') {
+            handleTestingOrderStart($testingDepartment, $testingOrderId);
+        } elseif (isset($routes[$path]) && in_array(
+            $path,
+            [
+                '/api/testing-desk/orders',
+                '/api/laboratory/orders',
+                '/api/radiology/orders',
+                '/api/cardiac/orders',
+            ],
+            true
+        )) {
+            $search = $_GET['search'] ?? '';
+            $status = $_GET['status'] ?? '';
+            if (!is_string($search) || !is_string($status)) {
+                jsonError('Search and status filters must be strings.', [
+                    'search' => 'Enter plain text to search.',
+                    'status' => 'Choose a supported order status.',
+                ], 422);
+            }
+            $scope = $path === '/api/testing-desk/orders'
+                ? 'testing_desk'
+                : substr($path, strlen('/api/'), -strlen('/orders'));
+            handleTestingOrdersGet($scope, $search, $status);
+        } elseif (in_array(
+            $path,
+            ['/api/laboratory/results', '/api/radiology/results', '/api/cardiac/results'],
+            true
+        )) {
+            $department = substr($path, strlen('/api/'), -strlen('/results'));
+            handleTestingResultCreate($department);
         } elseif ($path === '/api/doctor/queue') {
             $search = $_GET['search'] ?? '';
             if (!is_string($search)) {

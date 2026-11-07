@@ -257,6 +257,10 @@
         if (role === 'receptionist') return 'frontend/reception/index.php';
         if (role === 'nurse') return 'frontend/nursing/index.php';
         if (role === 'general_doctor') return 'frontend/doctor/index.php';
+        if (role === 'testing_desk_clerk') return 'frontend/testing-desk/index.php';
+        if (role === 'laboratory_technician') return 'frontend/laboratory/index.php';
+        if (role === 'radiographer') return 'frontend/radiology/index.php';
+        if (role === 'cardiac_technician') return 'frontend/cardiac/index.php';
         return 'frontend/dashboard.php';
     }
 
@@ -284,6 +288,10 @@
             });
             document.querySelectorAll('.doctor-only').forEach((link) => {
                 link.hidden = !['general_doctor', 'system_administrator'].includes(user.role.name);
+            });
+            document.querySelectorAll('[data-module-link]').forEach((link) => {
+                const roles = (link.dataset.roles || '').split(',').filter(Boolean);
+                link.hidden = !roles.includes(user.role.name);
             });
         } catch (error) {
             window.location.replace(`${projectBase}auth/login.php?message=session-expired`);

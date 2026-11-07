@@ -22,6 +22,10 @@
                 <a class="side-link reception-only" href="reception/index.php" hidden><span aria-hidden="true">⌕</span> Reception desk</a>
                 <a class="side-link nursing-only" href="nursing/index.php" hidden><span aria-hidden="true">＋</span> Nursing</a>
                 <a class="side-link doctor-only" href="doctor/index.php" hidden><span aria-hidden="true">＋</span> General doctor</a>
+                <a class="side-link" href="testing-desk/index.php" hidden data-module-link data-roles="testing_desk_clerk,system_administrator"><span aria-hidden="true">◷</span> Testing centre desk</a>
+                <a class="side-link" href="laboratory/index.php" hidden data-module-link data-roles="laboratory_technician,system_administrator"><span aria-hidden="true">＋</span> Laboratory</a>
+                <a class="side-link" href="radiology/index.php" hidden data-module-link data-roles="radiographer,system_administrator"><span aria-hidden="true">＋</span> Radiology</a>
+                <a class="side-link" href="cardiac/index.php" hidden data-module-link data-roles="cardiac_technician,system_administrator"><span aria-hidden="true">＋</span> Cardiac</a>
                 <a class="side-link admin-only" href="../auth/signup.php" hidden><span aria-hidden="true">＋</span> Staff accounts</a>
             </nav>
             <div class="sidebar-bottom">

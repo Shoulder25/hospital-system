@@ -216,9 +216,12 @@ CREATE TABLE IF NOT EXISTS test_orders (
     status ENUM('ordered', 'in_progress', 'completed', 'cancelled')
         NOT NULL DEFAULT 'ordered',
     ordered_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    testing_desk_routed_at DATETIME NULL,
+    testing_desk_routed_by_user_id INT UNSIGNED NULL,
     PRIMARY KEY (test_order_id),
     KEY idx_test_orders_visit (visit_id, ordered_at),
     KEY idx_test_orders_status (status),
+    KEY idx_test_orders_desk_route (testing_desk_routed_at),
     KEY idx_test_orders_retest_of (retest_of_order_id),
     CONSTRAINT fk_test_orders_visit
         FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
@@ -226,6 +229,9 @@ CREATE TABLE IF NOT EXISTS test_orders (
         FOREIGN KEY (ordered_by_user_id) REFERENCES users (user_id),
     CONSTRAINT fk_test_orders_retest_of
         FOREIGN KEY (retest_of_order_id) REFERENCES test_orders (test_order_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_test_orders_desk_routed_by
+        FOREIGN KEY (testing_desk_routed_by_user_id) REFERENCES users (user_id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
@@ -234,6 +240,7 @@ CREATE TABLE IF NOT EXISTS test_results (
     test_order_id INT UNSIGNED NOT NULL,
     recorded_by_user_id INT UNSIGNED NOT NULL,
     result_text LONGTEXT NOT NULL,
+    result_notes TEXT NULL,
     status ENUM('preliminary', 'final', 'amended') NOT NULL DEFAULT 'final',
     recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (test_result_id),

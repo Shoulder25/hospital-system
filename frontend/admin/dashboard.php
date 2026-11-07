@@ -60,6 +60,10 @@ $escape = static function ($value): string {
                 <a class="side-link" href="../reception/index.php"><span aria-hidden="true">⌕</span> Reception desk</a>
                 <a class="side-link" href="../nursing/index.php"><span aria-hidden="true">＋</span> Nursing</a>
                 <a class="side-link" href="../doctor/index.php"><span aria-hidden="true">＋</span> General doctor</a>
+                <a class="side-link" href="../testing-desk/index.php"><span aria-hidden="true">◷</span> Testing centre desk</a>
+                <a class="side-link" href="../laboratory/index.php"><span aria-hidden="true">＋</span> Laboratory</a>
+                <a class="side-link" href="../radiology/index.php"><span aria-hidden="true">＋</span> Radiology</a>
+                <a class="side-link" href="../cardiac/index.php"><span aria-hidden="true">＋</span> Cardiac</a>
             </nav>
             <div class="sidebar-bottom">
                 <div class="sidebar-help">

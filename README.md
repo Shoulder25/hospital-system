@@ -13,9 +13,10 @@ Source documents are in `docs/source/`.
 
 ## Important
 The database schema, PDO health check, authentication, administration,
-reception/patient registration, and nursing assessment modules are implemented.
-Other hospital workflow and department modules are still in progress;
-`.gitkeep` files only preserve empty folders.
+reception/patient registration, nursing assessment, general doctor, and testing
+centre/laboratory/radiology/cardiac modules are implemented. Other hospital
+workflow and department modules remain in progress; `.gitkeep` files only
+preserve empty folders.
 
 ## Backend and authentication
 The root `index.php` introduces the project and links to staff sign-in. The
@@ -34,3 +35,6 @@ routes, workflow status rules, and Postman tests are in
 contracts and test steps are in [`docs/NURSING.md`](./docs/NURSING.md).
 General doctor schema migration, clinical workflow, API contracts and test
 steps are in [`docs/DOCTOR.md`](./docs/DOCTOR.md).
+Testing-centre routing and laboratory, radiology, and cardiac workflows,
+including the Stage 5 migration and API contracts, are documented in
+[`docs/STAGE5_TESTING.md`](./docs/STAGE5_TESTING.md).

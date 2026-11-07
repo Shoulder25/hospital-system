@@ -295,6 +295,7 @@
             addTextCard(target, title, [
                 `Ordered: ${formatDateTime(item.ordered_at)}`,
                 result ? `Result (${label(result.status)}): ${result.text}` : 'No result recorded.',
+                result && result.notes ? `Result notes: ${result.notes}` : '',
                 result ? `Recorded: ${formatDateTime(result.recorded_at)}${result.recorded_by ? ` by ${result.recorded_by}` : ''}` : '',
                 item.retest_of_order_id ? `Retest of order #${item.retest_of_order_id}` : '',
             ]);

@@ -356,7 +356,7 @@ function handleDoctorVisitGet(string $visitId): void
     $testStatement = $database->prepare(
         'SELECT t.test_order_id, t.test_type, t.department, t.status AS order_status,
                 t.ordered_at, t.retest_of_order_id, tr.test_result_id,
-                tr.result_text, tr.status AS result_status, tr.recorded_at,
+                tr.result_text, tr.result_notes, tr.status AS result_status, tr.recorded_at,
                 recorder.display_name AS recorded_by
          FROM test_orders t
          LEFT JOIN test_results tr ON tr.test_order_id = t.test_order_id
@@ -378,6 +378,7 @@ function handleDoctorVisitGet(string $visitId): void
             'result' => $row['test_result_id'] === null ? null : [
                 'test_result_id' => (int) $row['test_result_id'],
                 'text' => $row['result_text'],
+                'notes' => $row['result_notes'],
                 'status' => $row['result_status'],
                 'recorded_at' => $row['recorded_at'],
                 'recorded_by' => $row['recorded_by'],
