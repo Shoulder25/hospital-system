@@ -1,0 +1,78 @@
+.specialist-content { display: grid; gap: 20px; }
+.specialist-welcome { align-items: flex-end; margin-bottom: 0; }
+.specialist-welcome h1 { margin: 0 0 8px; font-size: clamp(26px, 3vw, 34px); letter-spacing: -1px; }
+.specialist-count { border: 1px solid #dfe8ec; border-radius: 999px; padding: 8px 13px; background: #fff; color: #47606b; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.specialist-layout { display: grid; grid-template-columns: minmax(240px, .75fr) minmax(0, 1.65fr); align-items: start; gap: 18px; }
+.specialist-queue-panel, .specialist-record-panel, .specialist-outcome-panel { min-width: 0; }
+.specialist-queue { display: grid; max-height: 75vh; overflow-y: auto; }
+.specialist-referral-card { display: grid; gap: 6px; width: 100%; border: 0; border-bottom: 1px solid #edf1f2; padding: 14px 17px; background: #fff; color: #4a6269; text-align: left; cursor: pointer; }
+.specialist-referral-card:hover, .specialist-referral-card.selected { background: #f0f8f6; }
+.specialist-referral-card.selected { box-shadow: inset 3px 0 #168078; }
+.specialist-card-patient { color: #294850; font-size: 13px; }
+.specialist-referral-card > span { font-size: 11px; text-transform: capitalize; }
+.specialist-card-reason { overflow: hidden; color: #657b82; text-overflow: ellipsis; white-space: nowrap; }
+.specialist-referral-card small { color: #8a999d; font-size: 10px; }
+.specialist-empty { padding: 24px 16px; color: #77898e; font-size: 12px; text-align: center; }
+.specialist-workspace { display: grid; min-width: 0; gap: 18px; }
+.specialist-status { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 10px; background: #fff4dc; color: #805a10; font-size: 10px; font-weight: 800; text-transform: capitalize; white-space: nowrap; }
+.specialist-status-accepted { background: #e8f1ff; color: #315b91; }
+.specialist-record { display: grid; gap: 0; }
+.specialist-record-section { display: grid; gap: 8px; border-bottom: 1px solid #e8eef0; padding: 17px 20px; }
+.specialist-record-section h3 { margin: 0 0 3px; color: #294850; font-size: 13px; }
+.specialist-record-section > strong { color: #617680; font-size: 10px; text-transform: capitalize; }
+.specialist-record-section > p { margin: 0; color: #3c555d; font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.specialist-record-empty { color: #829197 !important; }
+.specialist-history-card { display: grid; grid-template-columns: minmax(110px, .45fr) minmax(0, 1fr); gap: 5px 12px; border: 1px solid #e7edef; border-radius: 8px; padding: 11px; background: #fbfdfd; }
+.specialist-history-card strong { color: #617680; font-size: 10px; font-weight: 700; text-transform: capitalize; }
+.specialist-history-card p { margin: 0; color: #3c555d; font-size: 11px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.specialist-accept-row { padding: 15px 20px; }
+.specialist-accept-row .button { min-height: 38px; }
+.specialist-form { display: grid; gap: 17px; padding: 19px; }
+.specialist-form-section { display: grid; gap: 12px; border-top: 1px solid #e8eef0; padding-top: 15px; }
+.specialist-form-section h3 { margin: 0; color: #294850; font-size: 13px; }
+.specialist-field { display: grid; min-width: 0; gap: 6px; color: #536a71; font-size: 11px; font-weight: 700; }
+.specialist-field b { color: #a63d43; }
+.specialist-field input, .specialist-field select, .specialist-field textarea { width: 100%; min-height: 38px; border: 1px solid #dbe5e6; border-radius: 7px; padding: 9px 10px; background: #fff; color: #30494f; font: inherit; font-size: 12px; font-weight: 400; }
+.specialist-field textarea { resize: vertical; line-height: 1.5; }
+.specialist-field input:focus, .specialist-field select:focus, .specialist-field textarea:focus { border-color: #3b9c92; outline: 0; box-shadow: 0 0 0 3px rgb(28 139 129 / 11%); }
+.specialist-check { display: flex; align-items: flex-start; gap: 8px; color: #415a60; font-size: 11px; line-height: 1.45; }
+.specialist-check input { flex: 0 0 auto; margin: 1px 0 0; accent-color: #117e78; }
+.specialist-therapy-fields, .specialist-prescription-fields { display: grid; gap: 12px; border-left: 2px solid #d7e9e5; padding-left: 13px; }
+.specialist-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.specialist-hint { margin: -4px 0 0; color: #7d8e92; font-size: 10px; line-height: 1.5; }
+.specialist-submit { justify-self: start; min-height: 40px; }
+.specialist-submit:disabled, [data-accept]:disabled { cursor: wait; opacity: .6; }
+.outside-letter { max-width: 900px; margin: 8px auto; padding: 28px; }
+.outside-letter-heading { display: flex; justify-content: space-between; gap: 15px; border-bottom: 1px solid #e8eef0; padding-bottom: 18px; }
+.outside-letter-heading .eyebrow { margin-bottom: 6px; }
+.outside-letter-heading h1 { margin: 0 0 5px; font-size: 24px; }
+.outside-letter-heading p:last-child { margin: 0; color: #71848a; font-size: 12px; }
+.outside-letter-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px 25px; padding: 22px 0; }
+.outside-letter-details div { min-width: 0; }
+.outside-letter-details dt { margin-bottom: 5px; color: #7c8d92; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.outside-letter-details dd { margin: 0; color: #30494f; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.outside-letter-summary { border-top: 1px solid #e8eef0; padding: 19px 0; }
+.outside-letter-summary h2 { margin: 0 0 10px; color: #294850; font-size: 15px; }
+.outside-letter-summary p { margin: 0; color: #3c555d; font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.outside-letter-note { margin: 0; border-top: 1px solid #e8eef0; padding-top: 14px; color: #7d8e92; font-size: 10px; line-height: 1.55; }
+
+@media (max-width: 900px) {
+    .specialist-layout { grid-template-columns: 1fr; }
+    .specialist-queue { max-height: 320px; }
+}
+
+@media (max-width: 600px) {
+    .specialist-welcome { align-items: flex-start; flex-direction: column; }
+    .specialist-form { padding: 15px; }
+    .specialist-field-grid, .outside-letter-details { grid-template-columns: 1fr; }
+    .specialist-history-card { grid-template-columns: 1fr; gap: 4px; }
+    .outside-letter { padding: 19px; }
+}
+
+@media print {
+    body, .dashboard-page { min-width: 0; background: #fff; }
+    .sidebar, .topbar, .admin-notice { display: none !important; }
+    .admin-page .dashboard-main { width: 100%; margin: 0; }
+    .outside-referral-page .dashboard-content { display: block; padding: 0; }
+    .outside-letter { max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; }
+}

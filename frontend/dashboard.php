@@ -26,6 +26,9 @@
                 <a class="side-link" href="laboratory/index.php" hidden data-module-link data-roles="laboratory_technician,system_administrator"><span aria-hidden="true">＋</span> Laboratory</a>
                 <a class="side-link" href="radiology/index.php" hidden data-module-link data-roles="radiographer,system_administrator"><span aria-hidden="true">＋</span> Radiology</a>
                 <a class="side-link" href="cardiac/index.php" hidden data-module-link data-roles="cardiac_technician,system_administrator"><span aria-hidden="true">＋</span> Cardiac</a>
+                <a class="side-link" href="billing/index.php" hidden data-module-link data-roles="cashier,system_administrator"><span aria-hidden="true">$</span> Cashier / Billing</a>
+                <a class="side-link" href="specialists/index.php" hidden data-module-link data-roles="resident_specialist,locum_specialist,system_administrator"><span aria-hidden="true">＋</span> Specialists</a>
+                <a class="side-link" href="therapy/index.php" hidden data-module-link data-roles="therapist,system_administrator"><span aria-hidden="true">＋</span> Therapy</a>
                 <a class="side-link admin-only" href="../auth/signup.php" hidden><span aria-hidden="true">＋</span> Staff accounts</a>
             </nav>
             <div class="sidebar-bottom">

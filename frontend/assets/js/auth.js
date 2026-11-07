@@ -261,6 +261,11 @@
         if (role === 'laboratory_technician') return 'frontend/laboratory/index.php';
         if (role === 'radiographer') return 'frontend/radiology/index.php';
         if (role === 'cardiac_technician') return 'frontend/cardiac/index.php';
+        if (role === 'cashier') return 'frontend/billing/index.php';
+        if (role === 'resident_specialist' || role === 'locum_specialist') {
+            return 'frontend/specialists/index.php';
+        }
+        if (role === 'therapist') return 'frontend/therapy/index.php';
         return 'frontend/dashboard.php';
     }
 

@@ -441,6 +441,27 @@ function handleTestingResultCreate(string $department): void
             $database->rollBack();
             jsonError('This test order is no longer in progress.', [], 409);
         }
+        $testFeeCodes = [
+            'blood' => 'TEST_BLOOD_DEMO',
+            'glucose' => 'TEST_GLUCOSE_DEMO',
+            'urine' => 'TEST_URINE_DEMO',
+            'pregnancy' => 'TEST_PREGNANCY_DEMO',
+            'pap_smear' => 'TEST_PAP_SMEAR_DEMO',
+            'x_ray' => 'TEST_X_RAY_DEMO',
+            'ecg' => 'TEST_ECG_DEMO',
+        ];
+        if (!isset($testFeeCodes[$order['test_type']])) {
+            throw new RuntimeException('No demo fee is configured for this test type.');
+        }
+        $bill = billingGetOrCreateBill($database, (int) $order['visit_id']);
+        billingAddFeeItemOnce(
+            $database,
+            (int) $bill['bill_id'],
+            $testFeeCodes[$order['test_type']],
+            'test',
+            (int) $orderId
+        );
+        billingRefreshBillTotal($database, (int) $bill['bill_id']);
         recordTestingAudit(
             $database,
             (int) $user['user_id'],

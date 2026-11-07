@@ -18,6 +18,9 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/reception/organizations' => ['GET'],
         '/api/reception/patients' => ['GET', 'POST'],
         '/api/reception/visits' => ['POST'],
+        '/api/billing/queue' => ['GET'],
+        '/api/specialists/referrals' => ['GET'],
+        '/api/therapy/queue' => ['GET'],
         '/api/nursing/dashboard' => ['GET'],
         '/api/nursing/queue' => ['GET'],
         '/api/doctor/dashboard' => ['GET'],
@@ -43,6 +46,13 @@ function dispatchApiRequest(string $method, string $path): void
     $testingDepartment = null;
     $testingOrderId = null;
     $testingAction = null;
+    $billingVisitId = null;
+    $billingPaymentId = null;
+    $specialistReferralId = null;
+    $specialistReferralAction = null;
+    $outsideReferralId = null;
+    $therapyReferralId = null;
+    $therapyAction = null;
 
     if (preg_match('#^/api/admin/users/([0-9]+)/status$#', $path, $matches)) {
         $statusUserId = $matches[1];
@@ -88,6 +98,48 @@ function dispatchApiRequest(string $method, string $path): void
         $testingDepartment = $matches[1];
         $testingOrderId = $matches[2];
         $testingAction = 'start';
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/billing/visits/([0-9]+)/ticket-payment$#',
+        $path,
+        $matches
+    )) {
+        $billingVisitId = $matches[1];
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/billing/payments/([0-9]+)/receipt$#',
+        $path,
+        $matches
+    )) {
+        $billingPaymentId = $matches[1];
+        $routes[$path] = ['GET'];
+    }
+    if (preg_match(
+        '#^/api/specialists/referrals/([0-9]+)/(accept|outcome)$#',
+        $path,
+        $matches
+    )) {
+        $specialistReferralId = $matches[1];
+        $specialistReferralAction = $matches[2];
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/specialists/outside-referrals/([0-9]+)$#',
+        $path,
+        $matches
+    )) {
+        $outsideReferralId = $matches[1];
+        $routes[$path] = ['GET'];
+    }
+    if (preg_match(
+        '#^/api/therapy/referrals/([0-9]+)/(sessions|complete)$#',
+        $path,
+        $matches
+    )) {
+        $therapyReferralId = $matches[1];
+        $therapyAction = $matches[2];
         $routes[$path] = ['POST'];
     }
 
@@ -210,6 +262,36 @@ function dispatchApiRequest(string $method, string $path): void
             handleTestingDeskRoute($testingDeskOrderId);
         } elseif ($testingOrderId !== null && $testingAction === 'start') {
             handleTestingOrderStart($testingDepartment, $testingOrderId);
+        } elseif ($billingVisitId !== null) {
+            handleBillingTicketPaymentCreate($billingVisitId);
+        } elseif ($billingPaymentId !== null) {
+            handleBillingReceiptGet($billingPaymentId);
+        } elseif ($specialistReferralId !== null) {
+            if ($specialistReferralAction === 'accept') {
+                handleSpecialistReferralAccept($specialistReferralId);
+            } else {
+                handleSpecialistReferralOutcome($specialistReferralId);
+            }
+        } elseif ($outsideReferralId !== null) {
+            handleSpecialistOutsideReferralGet($outsideReferralId);
+        } elseif ($path === '/api/specialists/referrals') {
+            handleSpecialistReferralsGet();
+        } elseif ($therapyReferralId !== null) {
+            if ($therapyAction === 'sessions') {
+                handleTherapySessionCreate($therapyReferralId);
+            } else {
+                handleTherapyComplete($therapyReferralId);
+            }
+        } elseif ($path === '/api/therapy/queue') {
+            handleTherapyQueueGet();
+        } elseif ($path === '/api/billing/queue') {
+            $search = $_GET['search'] ?? '';
+            if (!is_string($search)) {
+                jsonError('Search text must be a string.', [
+                    'search' => 'Enter plain text to search.',
+                ], 422);
+            }
+            handleBillingQueueGet($search);
         } elseif (isset($routes[$path]) && in_array(
             $path,
             [

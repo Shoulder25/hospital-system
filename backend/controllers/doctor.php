@@ -1030,7 +1030,7 @@ function handleDoctorDiagnosisCreate(): void
         $diagnosisId = (int) $database->lastInsertId();
 
         $nextStep = $outcome === 'diagnosis'
-            ? ($items !== [] ? 'prescription' : ($therapyEnabled ? 'therapy' : 'completed'))
+            ? ($therapyEnabled ? 'therapy' : ($items !== [] ? 'prescription' : 'completed'))
             : ($outcome === 'more_tests' ? 'more_tests' : 'specialist_referral');
         $consultationUpdate = $database->prepare(
             'UPDATE consultations
@@ -1130,7 +1130,7 @@ function handleDoctorDiagnosisCreate(): void
                     (int) $user['user_id'],
                     $items
                 );
-                $nextStatus = 'awaiting_pharmacy';
+                $nextStatus = $therapyEnabled ? 'awaiting_therapy' : 'awaiting_pharmacy';
             } else {
                 $nextStatus = $therapyEnabled ? 'awaiting_therapy' : 'completed';
             }
@@ -1208,7 +1208,11 @@ function handleDoctorPrescriptionCreate(): void
             jsonError('Visit not found.', [], 404);
         }
         if ((int) $visit['medication_collection_only'] === 1
-            || !in_array($visit['status'], ['awaiting_doctor', 'awaiting_tests', 'awaiting_pharmacy'], true)) {
+            || !in_array(
+                $visit['status'],
+                ['awaiting_doctor', 'awaiting_tests', 'awaiting_pharmacy', 'awaiting_therapy'],
+                true
+            )) {
             $database->rollBack();
             jsonError('A prescription cannot be added at this visit status.', [], 409);
         }
@@ -1276,11 +1280,17 @@ function handleDoctorPrescriptionCreate(): void
             (int) $user['user_id'],
             $items
         );
+        $nextStatus = $visit['status'] === 'awaiting_therapy'
+            ? 'awaiting_therapy'
+            : 'awaiting_pharmacy';
         $visitUpdate = $database->prepare(
-            "UPDATE visits SET status = 'awaiting_pharmacy'
-             WHERE visit_id = :visit_id"
+            'UPDATE visits SET status = :status
+             WHERE visit_id = :visit_id'
         );
-        $visitUpdate->execute(['visit_id' => (int) $visitId]);
+        $visitUpdate->execute([
+            'status' => $nextStatus,
+            'visit_id' => (int) $visitId,
+        ]);
         recordDoctorAudit(
             $database,
             (int) $user['user_id'],
@@ -1297,9 +1307,12 @@ function handleDoctorPrescriptionCreate(): void
         jsonError('Unable to save the prescription right now.', [], 500);
     }
 
-    jsonSuccess('Prescription created and made available to pharmacy.', [
+    $message = $nextStatus === 'awaiting_therapy'
+        ? 'Prescription created. The visit remains queued for therapy before pharmacy.'
+        : 'Prescription created and made available to pharmacy.';
+    jsonSuccess($message, [
         'prescription_id' => $prescriptionId,
         'visit_id' => (int) $visitId,
-        'status' => 'awaiting_pharmacy',
+        'status' => $nextStatus,
     ], 201);
 }

@@ -8,6 +8,7 @@ ini_set('log_errors', '1');
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/app.php';
 require_once __DIR__ . '/helpers/response.php';
+require_once __DIR__ . '/helpers/billing.php';
 require_once __DIR__ . '/middleware/auth.php';
 require_once __DIR__ . '/controllers/auth.php';
 require_once __DIR__ . '/controllers/admin.php';
@@ -15,6 +16,9 @@ require_once __DIR__ . '/controllers/reception.php';
 require_once __DIR__ . '/controllers/nursing.php';
 require_once __DIR__ . '/controllers/doctor.php';
 require_once __DIR__ . '/controllers/testing.php';
+require_once __DIR__ . '/controllers/billing.php';
+require_once __DIR__ . '/controllers/specialist.php';
+require_once __DIR__ . '/controllers/therapy.php';
 require_once __DIR__ . '/routes/api.php';
 
 try {
