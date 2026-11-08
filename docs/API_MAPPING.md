@@ -67,10 +67,14 @@ unpaid cashier-added items without deleting their history. The server resolves
 prices from `fee_catalog`; department-managed charges remain attached to their
 existing workflows and source records.
 
-The Therapy API also provides `GET /api/therapy/referrals/{id}` for an
-authorized referral's clinical record and session history. Session writes use
-a client request UUID so retries do not duplicate a session or its linked bill
-item.
+The Therapy API also provides dashboard and outcome reports,
+`GET /api/therapy/referrals/{id}` for authorized clinical history, and
+accept/flag, assessment, plan, progress, session, file, and completion routes.
+Therapist reads and writes are scoped to unassigned intake referrals or cases
+assigned to that therapist. Referring doctors and specialists can read their
+own therapy outcomes. Session writes use a client request UUID so retries do
+not duplicate a session or its linked bill item. See `THERAPY.md` for the
+current workflow and migration details.
 
 Doctor record reads use `GET /api/doctor/visits/{id}` and
 `GET /api/doctor/visits/{id}/history`. Nursing uses

@@ -637,14 +637,72 @@ function handleDoctorVisitGet(string $visitId): void
     foreach ($specialistReferrals->fetchAll() as $referral) {
         $referrals[] = ['type' => 'specialist'] + $referral;
     }
-    $therapyReferrals = $database->prepare(
-        'SELECT therapy_referral_id AS referral_id, therapy_type AS destination,
-                reason, status, created_at
-         FROM therapy_referrals WHERE visit_id = :visit_id'
+    $therapyReferralSql =
+        'SELECT therapy.therapy_referral_id AS referral_id,
+                therapy.therapy_referral_id, therapy.therapy_type AS destination,
+                therapy.reason, therapy.status, therapy.review_status,
+                therapy.flagged_reason, therapy.outcome, therapy.discharge_notes,
+                therapy.created_at,
+                therapy.completed_at, assigned.display_name AS therapist_name
+         FROM therapy_referrals therapy
+         LEFT JOIN users assigned
+            ON assigned.user_id = therapy.assigned_therapist_user_id
+         WHERE therapy.visit_id = :visit_id';
+    $therapyParameters = ['visit_id' => (int) $visitId];
+    if ($user['role_name'] !== 'system_administrator') {
+        $therapyReferralSql .= ' AND therapy.referred_by_user_id = :referring_user_id';
+        $therapyParameters['referring_user_id'] = (int) $user['user_id'];
+    }
+    $therapyReferralSql .= ' ORDER BY therapy.created_at, therapy.therapy_referral_id';
+    $therapyReferrals = $database->prepare($therapyReferralSql);
+    $therapyReferrals->execute($therapyParameters);
+    $therapyRows = $therapyReferrals->fetchAll();
+    $therapySessions = therapySessionsForReferrals(
+        $database,
+        array_map(
+            static fn (array $referral): int => (int) $referral['therapy_referral_id'],
+            $therapyRows
+        )
     );
-    $therapyReferrals->execute(['visit_id' => (int) $visitId]);
-    foreach ($therapyReferrals->fetchAll() as $referral) {
-        $referrals[] = ['type' => 'therapy', 'details' => null] + $referral;
+    foreach ($therapyRows as $referral) {
+        $referralId = (int) $referral['therapy_referral_id'];
+        $progressStatement = $database->prepare(
+            'SELECT patient_response, progress_notes, challenges,
+                    follow_up_recommendations, logged_at
+             FROM therapy_progress
+             WHERE therapy_referral_id = :referral_id
+             ORDER BY logged_at, progress_id'
+        );
+        $progressStatement->execute(['referral_id' => $referralId]);
+        $progressEntries = $progressStatement->fetchAll();
+        $details = [
+            'Assigned therapist: ' . ($referral['therapist_name'] ?? 'Awaiting acceptance'),
+            'Review status: ' . $referral['review_status'],
+        ];
+        if ($referral['flagged_reason'] !== null) {
+            $details[] = 'Flagged for clarification: ' . $referral['flagged_reason'];
+        }
+        if ($referral['outcome'] !== null) {
+            $details[] = 'Outcome: ' . $referral['outcome'];
+        }
+        if ($referral['discharge_notes'] !== null) {
+            $details[] = 'Discharge notes: ' . $referral['discharge_notes'];
+        }
+        foreach ($therapySessions[$referralId] ?? [] as $session) {
+            $details[] = 'Session ' . $session['session_at'] . ': '
+                . ($session['session_notes'] ?? 'No notes recorded.');
+        }
+        foreach ($progressEntries as $progress) {
+            $details[] = 'Progress ' . $progress['logged_at'] . ': '
+                . $progress['progress_notes'];
+            if ($progress['follow_up_recommendations'] !== null) {
+                $details[] = 'Follow-up: ' . $progress['follow_up_recommendations'];
+            }
+        }
+        $referrals[] = [
+            'type' => 'therapy',
+            'details' => implode("\n", $details),
+        ] + $referral;
     }
     $outsideReferrals = $database->prepare(
         'SELECT outside_referral_id AS referral_id,
@@ -1247,6 +1305,19 @@ function createClinicalTherapyReferral(
     string $therapyType,
     string $reason
 ): int {
+    $existingStatement = $database->prepare(
+        'SELECT therapy_referral_id
+         FROM therapy_referrals
+         WHERE source_consultation_id = :consultation_id
+         LIMIT 1
+         FOR UPDATE'
+    );
+    $existingStatement->execute(['consultation_id' => $consultationId]);
+    $existingReferralId = $existingStatement->fetchColumn();
+    if ($existingReferralId !== false) {
+        return (int) $existingReferralId;
+    }
+
     $statement = $database->prepare(
         'INSERT INTO therapy_referrals
             (visit_id, source_consultation_id, diagnosis_id,

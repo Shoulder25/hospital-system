@@ -299,6 +299,8 @@ CREATE TABLE IF NOT EXISTS medicines (
     is_low_schedule TINYINT(1) NOT NULL DEFAULT 0,
     unit_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     quantity_in_stock DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    reorder_level DECIMAL(10,2) NOT NULL DEFAULT 5.00,
+    expiry_date DATE NULL,
     is_demo TINYINT(1) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
     PRIMARY KEY (medicine_id),
@@ -592,13 +594,23 @@ CREATE TABLE IF NOT EXISTS therapy_referrals (
     source_consultation_id INT UNSIGNED NOT NULL,
     diagnosis_id INT UNSIGNED NULL,
     referred_by_user_id INT UNSIGNED NOT NULL,
+    assigned_therapist_user_id INT UNSIGNED NULL,
     therapy_type VARCHAR(100) NOT NULL,
     reason TEXT NOT NULL,
     status ENUM('referred', 'in_progress', 'completed', 'cancelled')
         NOT NULL DEFAULT 'referred',
+    review_status ENUM('pending', 'accepted', 'flagged')
+        NOT NULL DEFAULT 'pending',
+    flagged_reason TEXT NULL,
+    accepted_at DATETIME NULL,
+    completed_at DATETIME NULL,
+    outcome TEXT NULL,
+    discharge_notes TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (therapy_referral_id),
+    UNIQUE KEY uq_therapy_referrals_source_consultation (source_consultation_id),
     KEY idx_therapy_referrals_visit (visit_id, created_at),
+    KEY idx_therapy_referrals_assignment (assigned_therapist_user_id, status),
     CONSTRAINT fk_therapy_referrals_visit
         FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
     CONSTRAINT fk_therapy_referrals_diagnosis
@@ -608,7 +620,9 @@ CREATE TABLE IF NOT EXISTS therapy_referrals (
         FOREIGN KEY (source_consultation_id)
         REFERENCES consultations (consultation_id),
     CONSTRAINT fk_therapy_referrals_referred_by
-        FOREIGN KEY (referred_by_user_id) REFERENCES users (user_id)
+        FOREIGN KEY (referred_by_user_id) REFERENCES users (user_id),
+    CONSTRAINT fk_therapy_referrals_therapist
+        FOREIGN KEY (assigned_therapist_user_id) REFERENCES users (user_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS therapy_sessions (
@@ -616,6 +630,13 @@ CREATE TABLE IF NOT EXISTS therapy_sessions (
     therapy_referral_id INT UNSIGNED NOT NULL,
     therapist_user_id INT UNSIGNED NOT NULL,
     session_notes TEXT NULL,
+    activities_performed TEXT NULL,
+    observations TEXT NULL,
+    patient_response TEXT NULL,
+    progress_notes TEXT NULL,
+    challenges TEXT NULL,
+    follow_up_recommendations TEXT NULL,
+    session_completed TINYINT(1) NOT NULL DEFAULT 1,
     client_request_id CHAR(36) NULL,
     session_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (therapy_session_id),
@@ -627,6 +648,92 @@ CREATE TABLE IF NOT EXISTS therapy_sessions (
         REFERENCES therapy_referrals (therapy_referral_id),
     CONSTRAINT fk_therapy_sessions_therapist
         FOREIGN KEY (therapist_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS therapy_assessments (
+    assessment_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    therapy_referral_id INT UNSIGNED NOT NULL,
+    therapist_user_id INT UNSIGNED NOT NULL,
+    relevant_history TEXT NULL,
+    functional_status TEXT NOT NULL,
+    assessment_findings TEXT NOT NULL,
+    initial_goals TEXT NOT NULL,
+    assessed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (assessment_id),
+    UNIQUE KEY uq_therapy_assessments_referral (therapy_referral_id),
+    KEY idx_therapy_assessments_therapist (therapist_user_id, assessed_at),
+    CONSTRAINT fk_therapy_assessments_referral
+        FOREIGN KEY (therapy_referral_id)
+        REFERENCES therapy_referrals (therapy_referral_id),
+    CONSTRAINT fk_therapy_assessments_therapist
+        FOREIGN KEY (therapist_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS therapy_treatment_plans (
+    treatment_plan_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    therapy_referral_id INT UNSIGNED NOT NULL,
+    therapist_user_id INT UNSIGNED NOT NULL,
+    goals TEXT NOT NULL,
+    interventions TEXT NOT NULL,
+    frequency VARCHAR(150) NULL,
+    duration VARCHAR(150) NULL,
+    review_date DATE NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (treatment_plan_id),
+    UNIQUE KEY uq_therapy_treatment_plans_referral (therapy_referral_id),
+    KEY idx_therapy_treatment_plans_therapist (therapist_user_id, updated_at),
+    CONSTRAINT fk_therapy_treatment_plans_referral
+        FOREIGN KEY (therapy_referral_id)
+        REFERENCES therapy_referrals (therapy_referral_id),
+    CONSTRAINT fk_therapy_treatment_plans_therapist
+        FOREIGN KEY (therapist_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS therapy_progress (
+    progress_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    therapy_referral_id INT UNSIGNED NOT NULL,
+    therapy_session_id INT UNSIGNED NULL,
+    therapist_user_id INT UNSIGNED NOT NULL,
+    patient_response TEXT NOT NULL,
+    progress_notes TEXT NOT NULL,
+    challenges TEXT NULL,
+    follow_up_recommendations TEXT NULL,
+    logged_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (progress_id),
+    KEY idx_therapy_progress_referral (therapy_referral_id, logged_at),
+    KEY idx_therapy_progress_therapist (therapist_user_id, logged_at),
+    CONSTRAINT fk_therapy_progress_referral
+        FOREIGN KEY (therapy_referral_id)
+        REFERENCES therapy_referrals (therapy_referral_id),
+    CONSTRAINT fk_therapy_progress_session
+        FOREIGN KEY (therapy_session_id)
+        REFERENCES therapy_sessions (therapy_session_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_therapy_progress_therapist
+        FOREIGN KEY (therapist_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS therapy_files (
+    therapy_file_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    therapy_referral_id INT UNSIGNED NOT NULL,
+    uploaded_by_user_id INT UNSIGNED NOT NULL,
+    original_name VARCHAR(255) NOT NULL,
+    storage_key CHAR(48) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    file_size_bytes INT UNSIGNED NOT NULL,
+    uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (therapy_file_id),
+    UNIQUE KEY uq_therapy_files_storage_key (storage_key),
+    KEY idx_therapy_files_referral (therapy_referral_id, uploaded_at),
+    CONSTRAINT fk_therapy_files_referral
+        FOREIGN KEY (therapy_referral_id)
+        REFERENCES therapy_referrals (therapy_referral_id),
+    CONSTRAINT fk_therapy_files_uploader
+        FOREIGN KEY (uploaded_by_user_id) REFERENCES users (user_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS prescriptions (
@@ -845,6 +952,7 @@ CREATE TABLE IF NOT EXISTS dispensings (
     prescription_id INT UNSIGNED NOT NULL,
     pharmacist_user_id INT UNSIGNED NOT NULL,
     payment_id INT UNSIGNED NULL,
+    dispensing_notes TEXT NULL,
     dispensed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (dispensing_id),
     KEY idx_dispensings_visit (visit_id, dispensed_at),
@@ -880,6 +988,45 @@ CREATE TABLE IF NOT EXISTS dispensing_items (
         REFERENCES prescription_items (prescription_item_id),
     CONSTRAINT fk_dispensing_items_medicine
         FOREIGN KEY (medicine_id) REFERENCES medicines (medicine_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS pharmacy_stock_movements (
+    stock_movement_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    medicine_id INT UNSIGNED NOT NULL,
+    recorded_by_user_id INT UNSIGNED NOT NULL,
+    movement_type ENUM('received', 'adjustment', 'dispensed') NOT NULL,
+    quantity_change DECIMAL(10,2) NOT NULL,
+    stock_after DECIMAL(10,2) NOT NULL,
+    dispensing_id INT UNSIGNED NULL,
+    notes VARCHAR(1000) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (stock_movement_id),
+    KEY idx_pharmacy_stock_medicine_date (medicine_id, created_at),
+    KEY idx_pharmacy_stock_type_date (movement_type, created_at),
+    CONSTRAINT fk_pharmacy_stock_medicine
+        FOREIGN KEY (medicine_id) REFERENCES medicines (medicine_id),
+    CONSTRAINT fk_pharmacy_stock_user
+        FOREIGN KEY (recorded_by_user_id) REFERENCES users (user_id),
+    CONSTRAINT fk_pharmacy_stock_dispensing
+        FOREIGN KEY (dispensing_id) REFERENCES dispensings (dispensing_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS pharmacy_prescription_exceptions (
+    exception_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    prescription_item_id INT UNSIGNED NOT NULL,
+    recorded_by_user_id INT UNSIGNED NOT NULL,
+    status ENUM('open', 'resolved') NOT NULL DEFAULT 'open',
+    reason TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME NULL,
+    PRIMARY KEY (exception_id),
+    KEY idx_pharmacy_exception_item_status
+        (prescription_item_id, status, created_at),
+    CONSTRAINT fk_pharmacy_exception_item
+        FOREIGN KEY (prescription_item_id)
+        REFERENCES prescription_items (prescription_item_id),
+    CONSTRAINT fk_pharmacy_exception_user
+        FOREIGN KEY (recorded_by_user_id) REFERENCES users (user_id)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS audit_log (

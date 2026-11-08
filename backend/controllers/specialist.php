@@ -72,7 +72,11 @@ function specialistReferralForUpdate(
     return $referral;
 }
 
-function specialistReferralDetails(PDO $database, array $referral): array
+function specialistReferralDetails(
+    PDO $database,
+    array $referral,
+    int $viewerUserId
+): array
 {
     $visitId = (int) $referral['visit_id'];
 
@@ -152,6 +156,45 @@ function specialistReferralDetails(PDO $database, array $referral): array
         'visit_id' => $visitId,
     ]);
 
+    $therapyStatement = $database->prepare(
+        'SELECT therapy.therapy_referral_id, therapy.therapy_type,
+                therapy.reason, therapy.status, therapy.review_status,
+                therapy.outcome, therapy.discharge_notes, therapy.completed_at,
+                assigned.display_name AS therapist_name
+         FROM therapy_referrals therapy
+         LEFT JOIN users assigned
+            ON assigned.user_id = therapy.assigned_therapist_user_id
+         WHERE therapy.visit_id = :visit_id
+           AND therapy.referred_by_user_id = :referring_user_id
+         ORDER BY therapy.created_at, therapy.therapy_referral_id'
+    );
+    $therapyStatement->execute([
+        'visit_id' => $visitId,
+        'referring_user_id' => $viewerUserId,
+    ]);
+    $therapyReports = $therapyStatement->fetchAll();
+    $therapySessions = therapySessionsForReferrals(
+        $database,
+        array_map(
+            static fn (array $therapy): int => (int) $therapy['therapy_referral_id'],
+            $therapyReports
+        )
+    );
+    foreach ($therapyReports as &$therapyReport) {
+        $therapyId = (int) $therapyReport['therapy_referral_id'];
+        $progressStatement = $database->prepare(
+            'SELECT patient_response, progress_notes, challenges,
+                    follow_up_recommendations, logged_at
+             FROM therapy_progress
+             WHERE therapy_referral_id = :referral_id
+             ORDER BY logged_at, progress_id'
+        );
+        $progressStatement->execute(['referral_id' => $therapyId]);
+        $therapyReport['sessions'] = $therapySessions[$therapyId] ?? [];
+        $therapyReport['progress'] = $progressStatement->fetchAll();
+    }
+    unset($therapyReport);
+
     return [
         'referral' => [
             'specialist_referral_id' => (int) $referral['specialist_referral_id'],
@@ -178,6 +221,7 @@ function specialistReferralDetails(PDO $database, array $referral): array
         'tests' => $testsStatement->fetchAll(),
         'consultations' => $consultations,
         'diagnoses' => $diagnosesStatement->fetchAll(),
+        'therapy_reports' => $therapyReports,
     ];
 }
 
@@ -230,7 +274,11 @@ function handleSpecialistReferralsGet(): void
             'date_of_birth' => $row['date_of_birth'],
             'gender' => $row['gender'],
             'is_temporary' => (bool) $row['is_temporary'],
-            'details' => specialistReferralDetails($database, $row),
+            'details' => specialistReferralDetails(
+                $database,
+                $row,
+                (int) $user['user_id']
+            ),
         ];
         $referrals[] = $referral;
         specialistRecordAudit(
@@ -312,7 +360,11 @@ function handleSpecialistReferralGet(string $referralId): void
         'patient_name' => trim(
             (string) $row['first_name'] . ' ' . (string) $row['last_name']
         ),
-        'details' => specialistReferralDetails($database, $row),
+        'details' => specialistReferralDetails(
+            $database,
+            $row,
+            (int) $user['user_id']
+        ),
     ];
     specialistRecordAudit(
         $database,

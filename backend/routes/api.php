@@ -37,6 +37,8 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/billing/queue' => ['GET'],
         '/api/specialists/referrals' => ['GET'],
         '/api/therapy/queue' => ['GET'],
+        '/api/therapy/dashboard' => ['GET'],
+        '/api/therapy/reports' => ['GET'],
         '/api/pharmacy/queue' => ['GET'],
         '/api/nursing/dashboard' => ['GET'],
         '/api/nursing/queue' => ['GET'],
@@ -87,6 +89,7 @@ function dispatchApiRequest(string $method, string $path): void
     $outsideReferralId = null;
     $therapyReferralId = null;
     $therapyAction = null;
+    $therapyFileId = null;
     $pharmacyVisitId = null;
     $pharmacyAction = null;
     $pharmacyPaymentId = null;
@@ -262,13 +265,17 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = ['GET'];
     }
     if (preg_match(
-        '#^/api/therapy/referrals/([0-9]+)(?:/(sessions|complete))?$#',
+        '#^/api/therapy/referrals/([0-9]+)(?:/(accept|flag|assessment|treatment-plan|progress|sessions|complete|files))?$#',
         $path,
         $matches
     )) {
         $therapyReferralId = $matches[1];
         $therapyAction = $matches[2] ?? '';
         $routes[$path] = $therapyAction === '' ? ['GET'] : ['POST'];
+    }
+    if (preg_match('#^/api/therapy/files/([0-9]+)$#', $path, $matches)) {
+        $therapyFileId = $matches[1];
+        $routes[$path] = ['GET'];
     }
     if (preg_match(
         '#^/api/pharmacy/visits/([0-9]+)(?:/(prescription|payments|dispense|dispensings))?$#',
@@ -552,14 +559,32 @@ function dispatchApiRequest(string $method, string $path): void
             handleSpecialistOutsideReferralGet($outsideReferralId);
         } elseif ($path === '/api/specialists/referrals') {
             handleSpecialistReferralsGet();
+        } elseif ($therapyFileId !== null) {
+            handleTherapyFileGet($therapyFileId);
         } elseif ($therapyReferralId !== null) {
-            if ($therapyAction === 'sessions') {
+            if ($therapyAction === 'accept') {
+                handleTherapyReferralAccept($therapyReferralId);
+            } elseif ($therapyAction === 'flag') {
+                handleTherapyReferralFlag($therapyReferralId);
+            } elseif ($therapyAction === 'assessment') {
+                handleTherapyAssessmentSave($therapyReferralId);
+            } elseif ($therapyAction === 'treatment-plan') {
+                handleTherapyTreatmentPlanSave($therapyReferralId);
+            } elseif ($therapyAction === 'progress') {
+                handleTherapyProgressSave($therapyReferralId);
+            } elseif ($therapyAction === 'sessions') {
                 handleTherapySessionCreate($therapyReferralId);
             } elseif ($therapyAction === 'complete') {
                 handleTherapyComplete($therapyReferralId);
+            } elseif ($therapyAction === 'files') {
+                handleTherapyFileUpload($therapyReferralId);
             } else {
                 handleTherapyReferralGet($therapyReferralId);
             }
+        } elseif ($path === '/api/therapy/dashboard') {
+            handleTherapyDashboardGet();
+        } elseif ($path === '/api/therapy/reports') {
+            handleTherapyReportsGet();
         } elseif ($path === '/api/therapy/queue') {
             handleTherapyQueueGet();
         } elseif ($path === '/api/emergency/queue') {

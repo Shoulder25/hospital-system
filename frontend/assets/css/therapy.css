@@ -2,20 +2,28 @@
 .therapy-welcome { align-items: flex-end; margin-bottom: 0; }
 .therapy-welcome h1 { margin: 0 0 8px; font-size: clamp(26px, 3vw, 34px); letter-spacing: -1px; }
 .therapy-count { border: 1px solid #dfe8ec; border-radius: 999px; padding: 8px 13px; background: #fff; color: #47606b; font-size: 11px; font-weight: 700; white-space: nowrap; }
-.therapy-layout { display: grid; grid-template-columns: minmax(240px, .75fr) minmax(0, 1.65fr); align-items: start; gap: 18px; }
+.therapy-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.therapy-stats a { display: grid; gap: 7px; padding: 17px; border: 1px solid #e5edef; border-radius: 10px; background: #fff; color: #71848a; font-size: 11px; text-decoration: none; }
+.therapy-stats a:hover { border-color: #b7d8d2; background: #f7fbfa; }
+.therapy-stats strong { color: #294850; font-size: 23px; }
 .therapy-queue-panel, .therapy-record-panel { min-width: 0; }
-.therapy-queue { display: grid; max-height: 75vh; overflow-y: auto; }
-.therapy-referral-card { display: grid; gap: 6px; width: 100%; border: 0; border-bottom: 1px solid #edf1f2; padding: 14px 17px; background: #fff; color: #4a6269; text-align: left; cursor: pointer; }
-.therapy-referral-card:hover, .therapy-referral-card.selected { background: #f0f8f6; }
-.therapy-referral-card.selected { box-shadow: inset 3px 0 #168078; }
+.therapy-queue { display: grid; max-height: 72vh; overflow-y: auto; }
+.therapy-referral-card { display: grid; gap: 7px; border-bottom: 1px solid #edf1f2; padding: 15px 18px; background: #fff; color: #4a6269; }
+.therapy-referral-card:hover { background: #f8fbfb; }
 .therapy-card-patient { color: #294850; font-size: 13px; }
 .therapy-referral-card > span { font-size: 11px; text-transform: capitalize; }
-.therapy-card-reason { overflow: hidden; color: #657b82; text-overflow: ellipsis; white-space: nowrap; }
-.therapy-referral-card small { color: #8a999d; font-size: 10px; }
+.therapy-card-reason { margin: 0; color: #657b82; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.therapy-card-progress, .therapy-referral-card small { color: #8a999d; font-size: 10px; }
+.therapy-card-footer, .therapy-card-actions, .therapy-list-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.therapy-card-actions { justify-content: flex-end; }
+.therapy-card-actions .button { min-height: 29px; }
+.therapy-list-tools { flex-wrap: wrap; }
+.therapy-list-tools input { min-height: 36px; width: min(58vw, 300px); padding: 0 10px; border: 1px solid #dbe5e6; border-radius: 7px; color: #30494f; font: inherit; font-size: 11px; }
 .therapy-empty { padding: 24px 16px; color: #77898e; font-size: 12px; text-align: center; }
 .therapy-status { display: inline-flex; align-items: center; border-radius: 999px; padding: 6px 10px; background: #fff4dc; color: #805a10; font-size: 10px; font-weight: 800; text-transform: capitalize; white-space: nowrap; }
 .therapy-status-in_progress { background: #e8f1ff; color: #315b91; }
 .therapy-status-completed { background: #e6f4eb; color: #2f7047; }
+.therapy-back-link { margin: -5px 0 0; }
 .therapy-record { display: grid; }
 .therapy-record-section { display: grid; gap: 12px; border-bottom: 1px solid #e8eef0; padding: 17px 20px; }
 .therapy-record-section h3 { margin: 0; color: #294850; font-size: 13px; }
@@ -28,24 +36,44 @@
 .therapy-session-card small { color: #7d8e92; font-size: 10px; }
 .therapy-session-card p { margin: 0; color: #3c555d; font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .therapy-record-empty { margin: 0; color: #829197; font-size: 12px; }
-.therapy-actions { grid-template-columns: minmax(0, 1.2fr) minmax(180px, .8fr); align-items: end; gap: 20px; }
-.therapy-session-form { display: grid; gap: 12px; }
+.therapy-form { display: grid; gap: 12px; max-width: 900px; }
 .therapy-field { display: grid; gap: 6px; color: #536a71; font-size: 11px; font-weight: 700; }
 .therapy-field small { color: #829197; font-weight: 400; }
-.therapy-field textarea { width: 100%; min-height: 74px; border: 1px solid #dbe5e6; border-radius: 7px; padding: 9px 10px; background: #fff; color: #30494f; font: inherit; font-size: 12px; font-weight: 400; resize: vertical; }
-.therapy-field textarea:focus { border-color: #3b9c92; outline: 0; box-shadow: 0 0 0 3px rgb(28 139 129 / 11%); }
-.therapy-complete { display: grid; justify-items: start; gap: 10px; }
-.therapy-complete p { margin: 0; color: #71848a; font-size: 11px; line-height: 1.5; }
-.therapy-actions button:disabled { cursor: not-allowed; opacity: .6; }
+.therapy-field textarea, .therapy-field input, .therapy-field select { width: 100%; min-height: 39px; border: 1px solid #dbe5e6; border-radius: 7px; padding: 9px 10px; background: #fff; color: #30494f; font: inherit; font-size: 12px; font-weight: 400; }
+.therapy-field textarea { min-height: 74px; resize: vertical; }
+.therapy-field textarea:focus, .therapy-field input:focus, .therapy-field select:focus { border-color: #3b9c92; outline: 0; box-shadow: 0 0 0 3px rgb(28 139 129 / 11%); }
+.therapy-form-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.therapy-review-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 20px; }
+.therapy-help { margin: 0; color: #71848a; font-size: 11px; line-height: 1.5; }
+.therapy-outcome { margin: 0; color: #3c555d; font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.therapy-files { display: grid; gap: 8px; }
+.therapy-file-link { color: #167c74; font-size: 12px; overflow-wrap: anywhere; }
+.therapy-upload-form { max-width: 600px; }
+.therapy-report-panel { min-width: 0; }
+.therapy-report-table { min-width: 850px; }
+.therapy-report-table td { white-space: normal; line-height: 1.5; }
+.therapy-report-table a { color: #167c74; text-decoration: none; }
+.therapy-report-table a:hover { text-decoration: underline; }
+.therapy-shortcuts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: #eaf0f1; }
+.therapy-shortcuts a { display: grid; gap: 7px; padding: 17px; background: #fff; color: #768a8f; font-size: 11px; line-height: 1.45; text-decoration: none; }
+.therapy-shortcuts a:hover { background: #f5faf9; }
+.therapy-shortcuts strong { color: #294850; font-size: 12px; }
+.therapy-actions button:disabled, .therapy-form button:disabled { cursor: not-allowed; opacity: .6; }
 
 @media (max-width: 900px) {
-    .therapy-layout { grid-template-columns: 1fr; }
     .therapy-queue { max-height: 320px; }
+    .therapy-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 600px) {
     .therapy-welcome { align-items: flex-start; flex-direction: column; }
-    .therapy-actions { grid-template-columns: 1fr; }
     .therapy-details { grid-template-columns: 1fr; gap: 4px; }
     .therapy-details dd { margin-bottom: 8px; }
+    .therapy-card-footer, .therapy-list-tools { align-items: stretch; flex-direction: column; }
+    .therapy-list-tools input { width: 100%; }
+    .therapy-form-row, .therapy-review-actions, .therapy-shortcuts { grid-template-columns: 1fr; }
+    .therapy-review-actions .button { justify-self: start; }
+    .therapy-stats { gap: 9px; }
+    .therapy-stats a { padding: 13px; }
+    .therapy-card-actions { justify-content: space-between; }
 }

@@ -208,6 +208,32 @@
             ...details.consultations,
             ...details.diagnoses,
         ]);
+        const therapyReports = (details.therapy_reports || []).flatMap((report) => [
+            {
+                therapy_type: report.therapy_type,
+                status: report.status,
+                review_status: report.review_status,
+                assigned_therapist: report.therapist_name,
+                outcome: report.outcome,
+                discharge_notes: report.discharge_notes,
+                completed_at: report.completed_at,
+            },
+            ...report.sessions.map((session) => ({
+                session_at: session.session_at,
+                session_notes: session.session_notes,
+                patient_response: session.patient_response,
+                progress_notes: session.progress_notes,
+                follow_up_recommendations: session.follow_up_recommendations,
+            })),
+            ...report.progress.map((progress) => ({
+                progress_recorded_at: progress.logged_at,
+                patient_response: progress.patient_response,
+                progress_notes: progress.progress_notes,
+                challenges: progress.challenges,
+                follow_up_recommendations: progress.follow_up_recommendations,
+            })),
+        ]);
+        addRecordSection(content, 'Therapy reports and progress', therapyReports);
         panel.hidden = false;
         const isPending = details.referral.status === 'pending';
         document.querySelector('[data-accept-row]').hidden = !isPending;

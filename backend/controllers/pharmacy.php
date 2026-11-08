@@ -1299,6 +1299,14 @@ function handlePharmacyDispense(string $visitId): void
     $database = getDatabaseConnection();
     $user = requirePharmacyAccess($database);
     requireCsrfRequest();
+    $input = readJsonRequest();
+    $dispensingNotes = $input['notes'] ?? '';
+    if (!is_string($dispensingNotes) || strlen($dispensingNotes) > 5000) {
+        jsonError('Dispensing notes must be 5,000 characters or fewer.', [
+            'notes' => 'Shorten the dispensing notes.',
+        ], 422);
+    }
+    $dispensingNotes = trim($dispensingNotes);
 
     try {
         $database->beginTransaction();
@@ -1362,7 +1370,7 @@ function handlePharmacyDispense(string $visitId): void
             'SELECT item.prescription_item_id, item.prescription_id,
                     item.medicine_id, item.quantity, medicine.medicine_name,
                     medicine.unit_price, medicine.quantity_in_stock,
-                    medicine.is_active
+                    medicine.is_active, medicine.expiry_date
              FROM prescription_items item
              INNER JOIN medicines medicine ON medicine.medicine_id = item.medicine_id
              WHERE item.prescription_id IN (' . $placeholders . ')
@@ -1392,6 +1400,15 @@ function handlePharmacyDispense(string $visitId): void
                     409
                 );
             }
+            if ($item['expiry_date'] !== null
+                && $item['expiry_date'] < date('Y-m-d')) {
+                $database->rollBack();
+                jsonError(
+                    $item['medicine_name'] . ' is expired and cannot be dispensed.',
+                    ['medicine_id' => 'Remove expired stock and contact the prescriber.'],
+                    409
+                );
+            }
         }
         foreach ($requiredStock as $medicineId => $requiredQuantity) {
             if ($availableStock[$medicineId] < $requiredQuantity) {
@@ -1417,9 +1434,11 @@ function handlePharmacyDispense(string $visitId): void
 
         $dispensingInsert = $database->prepare(
             'INSERT INTO dispensings
-                (visit_id, prescription_id, pharmacist_user_id, payment_id)
+                (visit_id, prescription_id, pharmacist_user_id, payment_id,
+                 dispensing_notes)
              VALUES
-                (:visit_id, :prescription_id, :pharmacist_user_id, :payment_id)'
+                (:visit_id, :prescription_id, :pharmacist_user_id, :payment_id,
+                 :dispensing_notes)'
         );
         $dispensingItemInsert = $database->prepare(
             'INSERT INTO dispensing_items
@@ -1444,6 +1463,7 @@ function handlePharmacyDispense(string $visitId): void
                 'prescription_id' => $prescriptionId,
                 'pharmacist_user_id' => (int) $user['user_id'],
                 'payment_id' => $paymentId,
+                'dispensing_notes' => $dispensingNotes === '' ? null : $dispensingNotes,
             ]);
             $dispensingId = (int) $database->lastInsertId();
             $dispensingIds[] = $dispensingId;
@@ -1466,6 +1486,28 @@ function handlePharmacyDispense(string $visitId): void
             if ($stockUpdate->rowCount() !== 1) {
                 throw new RuntimeException('Medicine stock changed during dispensing.');
             }
+            $movement = $database->prepare(
+                'INSERT INTO pharmacy_stock_movements
+                    (medicine_id, recorded_by_user_id, movement_type,
+                     quantity_change, stock_after, dispensing_id, notes)
+                 SELECT :medicine_id, :user_id, \'dispensed\', :quantity_change,
+                        medicine.quantity_in_stock, :dispensing_id, :notes
+                 FROM medicines medicine
+                 WHERE medicine.medicine_id = :stock_medicine_id'
+            );
+            $movement->execute([
+                'medicine_id' => (int) $item['medicine_id'],
+                'user_id' => (int) $user['user_id'],
+                'quantity_change' => number_format(
+                    -(float) $item['quantity'],
+                    2,
+                    '.',
+                    ''
+                ),
+                'dispensing_id' => $dispensingId,
+                'notes' => $dispensingNotes === '' ? null : $dispensingNotes,
+                'stock_medicine_id' => (int) $item['medicine_id'],
+            ]);
         }
 
         $prescriptionUpdate = $database->prepare(
