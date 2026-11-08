@@ -210,6 +210,26 @@ emergency history. This scenario is implemented but not yet verified end to end.
 Path: `awaiting_pharmacy` → `awaiting_pharmacy` (prescription selected/paid) →
 `completed`.
 
+### S10 — ECG order, examination, report and doctor review
+
+1. If this is an existing database, apply
+   `database/migrations/20261108_cardiac_module.sql`.
+2. **General doctor:** create a fictional visit and request ECG. **Testing
+   Centre clerk:** route the ECG order to Cardiac.
+3. **Cardiac technician:** open **Incoming ECG orders** or **Pending
+   examinations**, start the routed order, then upload one or more JPG, JPEG,
+   PNG, or PDF files. Record technical findings and observations; save a draft
+   first if needed, then submit the final report.
+4. Verify the examination attempt, technician and timestamps in **ECG history**
+   or **Order details**. An unsuccessful attempt requires a reason and remains
+   open for a later attempt.
+5. **General doctor:** open the same visit's clinical record and verify the
+   final ECG result and its attachments are available.
+
+Expected: the order remains attached to its original visit; the submitted
+report is visible to the requesting doctor; a final result adds the existing
+ECG test charge only once. Appointment scheduling and DICOM are not configured.
+
 ## Run results for this checkout
 
 | Scenario | Result | Status path taken / blocker |
@@ -223,6 +243,7 @@ Path: `awaiting_pharmacy` → `awaiting_pharmacy` (prescription selected/paid) �
 | S7 therapy | FAIL — not run | No therapist or pharmacist demo account/password available; no authenticated UI workflow performed. |
 | S8 emergency | FAIL — not run | Nurse pages, API, and doctor handover are implemented; migration and authenticated end-to-end workflow still require verification. |
 | S9 medication-only | FAIL — not run | No pharmacist demo account/password available; no authenticated UI workflow performed. |
+| S10 ECG | FAIL — not run | Cardiac pages, API paths, and migration are implemented; an authenticated doctor → Testing Centre → cardiac technician → doctor workflow still requires verification. |
 
 The 2026-11-07 health and syntax checks predate the Emergency Nurse changes and
 do not verify the current workflow. These checks do not substitute for the UI

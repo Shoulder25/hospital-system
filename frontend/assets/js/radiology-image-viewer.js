@@ -19,7 +19,7 @@
     function createDialog() {
         dialog = document.createElement('dialog');
         dialog.className = 'radiology-image-viewer';
-        dialog.setAttribute('aria-label', 'Radiology image viewer');
+        dialog.setAttribute('aria-label', 'Medical image viewer');
 
         const header = document.createElement('div');
         header.className = 'radiology-image-viewer-header';
@@ -91,7 +91,7 @@
         open(src, alt, title) {
             if (!dialog) createDialog();
             const heading = dialog.querySelector('[data-viewer-title]');
-            heading.textContent = title || alt || 'Radiology image';
+            heading.textContent = title || alt || 'Medical image';
             image.alt = alt || heading.textContent;
             naturalWidth = 0;
             if (typeof dialog.showModal === 'function') {

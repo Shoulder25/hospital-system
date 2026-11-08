@@ -30,9 +30,9 @@ does not treat the proposal as final. Routes are dispatched through
 | Radiology | `GET /api/radiology/orders` | `GET /api/radiology/orders` | Implemented |
 | Radiology | `POST /api/radiology/orders` | — | Orders are created by nursing/doctor decisions; no direct create route |
 | Radiology | `POST /api/radiology/results` | `POST /api/radiology/results` | Implemented |
-| Cardiac | `GET /api/cardiac/orders` | `GET /api/cardiac/orders` | Implemented |
+| Cardiac | `GET /api/cardiac/orders` | `GET /api/cardiac/orders` | Implemented; includes ECG attempts and private attachments |
 | Cardiac | `POST /api/cardiac/orders` | — | Orders are created by nursing/doctor decisions; no direct create route |
-| Cardiac | `POST /api/cardiac/results` | `POST /api/cardiac/results` | Implemented |
+| Cardiac | `POST /api/cardiac/results` | `POST /api/cardiac/results` | Draft and final ECG results; final submission completes the order |
 | Specialist | `GET /api/specialist/referrals` | `GET /api/specialists/referrals` | Implemented; current path is plural |
 | Specialist | `POST /api/specialist/referrals` | `POST /api/diagnoses` | Created as a doctor diagnosis/decision; no direct matching route |
 | Specialist | `POST /api/specialist/consultations` | `POST /api/specialists/referrals/{id}/outcome` | Consultation/outcome combined |
@@ -87,3 +87,12 @@ specialist-referral, or therapy next step.
 Emergency Department routes and workflow are described in `EMERGENCY.md`.
 All current endpoint paths remain provisional until Person 3's specification
 is reconciled.
+
+Cardiac technicians start routed ECG orders through
+`POST /api/cardiac/orders/{id}/start`, can record an unsuccessful attempt with
+`POST /api/cardiac/orders/{id}/examinations`, and upload/manage private ECG
+files through `POST /api/cardiac/orders/{id}/files`,
+`GET /api/cardiac/files/{id}`, and `DELETE /api/cardiac/files/{id}/delete`.
+General doctors can open or download attachments only after a final ECG report
+is submitted. File support is JPG, JPEG, PNG, and PDF; DICOM is not configured.
+Existing databases must apply `database/migrations/20261108_cardiac_module.sql`.

@@ -905,8 +905,7 @@ function handleTestingResultCreate(string $department): void
             if ($department === 'cardiac') {
                 cardiacCompleteLatestAttempt(
                     $database,
-                    (int) $orderId,
-                    (int) $user['user_id']
+                    (int) $orderId
                 );
             }
             if ($department === 'laboratory') {

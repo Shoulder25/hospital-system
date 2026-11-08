@@ -297,7 +297,8 @@
         }
         if (scope === 'cardiac') {
             if (page === 'orders') {
-                selected = selected.filter((order) => order.status !== 'completed'
+                selected = selected.filter((order) => Boolean(order.desk_routed_at)
+                    && order.status !== 'completed'
                     && order.status !== 'cancelled');
             } else if (page === 'pending') {
                 selected = selected.filter((order) => order.status === 'ordered'
