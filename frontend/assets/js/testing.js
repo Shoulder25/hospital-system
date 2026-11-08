@@ -14,6 +14,7 @@
         csrfToken: '',
         search: requestedOrderId || '',
         status: document.body.dataset.defaultStatus || '',
+        testType: '',
         department: '',
         activeOrder: null,
         orders: [],
@@ -151,7 +152,7 @@
         const tr = document.createElement('tr');
         const td = document.createElement('td');
         td.className = 'table-message';
-        td.colSpan = scope === 'testing_desk' ? 10 : 7;
+        td.colSpan = scope === 'testing_desk' || scope === 'laboratory' ? 10 : 7;
         td.textContent = message;
         tr.appendChild(td);
         queueBody.appendChild(tr);
@@ -196,6 +197,15 @@
             return action;
         }
 
+        if (scope === 'laboratory') {
+            if (page === 'pending' && order.status === 'ordered' && order.desk_routed_at) {
+                action.appendChild(makeButton('Receive for collection', () => startOrder(order)));
+            } else {
+                action.appendChild(orderLink(order, 'View details', 'order-details.php'));
+            }
+            return action;
+        }
+
         if (order.status === 'ordered') {
             if (!order.desk_routed_at) {
                 action.textContent = 'Awaiting testing desk';
@@ -227,6 +237,23 @@
         if (scope === 'testing_desk' && page === 'queue') {
             selected = selected.filter((order) => order.status === 'ordered' && !order.desk_routed_at);
         }
+        if (scope === 'laboratory') {
+            if (page === 'pending') {
+                selected = selected.filter((order) => order.status === 'ordered');
+            } else if (page === 'specimens') {
+                selected = selected.filter((order) => order.status === 'in_progress'
+                    && order.specimen
+                    && order.specimen.status !== 'processing'
+                    && order.specimen.status !== 'completed');
+            } else if (page === 'processing') {
+                selected = selected.filter((order) => order.status === 'in_progress'
+                    && order.specimen?.status === 'processing');
+            } else if (page === 'completed') {
+                selected = selected.filter((order) => order.status === 'completed');
+            } else if (page === 'results') {
+                selected = selected.filter((order) => ['in_progress', 'completed'].includes(order.status));
+            }
+        }
         updateCounts(selected);
         queueBody.replaceChildren();
         if (selected.length === 0) {
@@ -245,12 +272,14 @@
                 orderId.appendChild(tag);
             }
             cell(row, `${order.patient_name} · ${order.patient_number}`);
+            if (scope === 'laboratory') cell(row, order.patient_id);
             cell(row, `#${order.visit_id}`);
             cell(row, pretty(order.test_type));
             if (scope === 'testing_desk') {
                 cell(row, pretty(order.department));
                 cell(row, `${order.ordered_by || 'Staff'} · ${pretty(order.ordered_by_role)}`);
             }
+            if (scope === 'laboratory') cell(row, order.ordered_by || 'Staff');
             cell(row, formatDateTime(order.ordered_at));
             const statusCell = cell(row, '');
             const badge = document.createElement('span');
@@ -260,6 +289,9 @@
             if (scope === 'testing_desk') {
                 const latest = order.results[order.results.length - 1];
                 cell(row, latest ? `${pretty(latest.status)} · ${formatDateTime(latest.recorded_at)}` : 'No result yet');
+            }
+            if (scope === 'laboratory') {
+                cell(row, order.specimen ? pretty(order.specimen.status) : 'Not received');
             }
             row.appendChild(orderAction(order));
             queueBody.appendChild(row);
@@ -278,6 +310,7 @@
                     query: {
                         ...(state.search ? { search: state.search } : {}),
                         ...(state.status ? { status: state.status } : {}),
+                        ...(state.testType ? { test_type: state.testType } : {}),
                     },
                 },
                 'Could not load test orders.'
@@ -405,10 +438,33 @@
                 }
             }
         }
+        renderSpecimenHistory(order.specimens || []);
+        renderSpecimenActions(order);
         renderResultHistory(order.results);
         if (resultForm) {
             resultForm.reset();
-            resultForm.hidden = scope === 'testing_desk' || order.status !== 'in_progress';
+            const resultStatus = resultForm.querySelector('[data-result-status]');
+            if (scope === 'laboratory') {
+                const canAmend = order.status === 'completed';
+                const canRecord = order.status === 'in_progress'
+                    && order.specimen?.status === 'processing';
+                resultForm.hidden = !canAmend && !canRecord;
+                resultStatus.replaceChildren();
+                const options = canAmend
+                    ? [['amended', 'Additional result entry']]
+                    : [
+                        ['preliminary', 'Preliminary entry'],
+                        ['final', 'Final result'],
+                    ];
+                options.forEach(([value, label]) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = label;
+                    resultStatus.appendChild(option);
+                });
+            } else {
+                resultForm.hidden = scope === 'testing_desk' || order.status !== 'in_progress';
+            }
         }
         detailPanel.hidden = false;
         detailPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -428,6 +484,168 @@
             empty.textContent = 'No result has been recorded for this test order.';
             target.appendChild(empty);
             return;
+        }
+
+        function renderSpecimenHistory(specimens) {
+            const target = document.querySelector('[data-specimen-history]');
+            if (!target) return;
+            target.replaceChildren();
+            if (specimens.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'testing-empty';
+                empty.textContent = 'No specimen collection attempts are recorded yet.';
+                target.appendChild(empty);
+                return;
+            }
+            specimens.forEach((specimen) => {
+                const article = document.createElement('article');
+                article.className = 'testing-result-card';
+                const heading = document.createElement('strong');
+                heading.textContent = `Attempt #${specimen.lab_specimen_id} · ${pretty(specimen.status)}`;
+                article.appendChild(heading);
+                const text = document.createElement('p');
+                text.textContent = `Specimen type: ${specimen.type || 'Not recorded'} · Collected: ${formatDateTime(specimen.collected_at)}`;
+                article.appendChild(text);
+                if (specimen.rejection_reason) {
+                    const reason = document.createElement('p');
+                    reason.className = 'testing-result-notes';
+                    reason.textContent = `Rejection reason: ${specimen.rejection_reason}`;
+                    article.appendChild(reason);
+                }
+                if (specimen.notes) {
+                    const notes = document.createElement('p');
+                    notes.className = 'testing-result-notes';
+                    notes.textContent = `Notes: ${specimen.notes}`;
+                    article.appendChild(notes);
+                }
+                const author = document.createElement('small');
+                author.textContent = `Opened by ${specimen.recorded_by || 'staff'} · Last updated by ${specimen.updated_by || 'staff'} · ${formatDateTime(specimen.updated_at)}`;
+                article.appendChild(author);
+                target.appendChild(article);
+            });
+        }
+
+        function specimenForm(order, action) {
+            const form = document.createElement('form');
+            form.className = 'testing-specimen-form';
+            const typeLabel = document.createElement('label');
+            const typeText = document.createElement('span');
+            typeText.textContent = 'Specimen type';
+            const typeInput = document.createElement('input');
+            typeInput.name = 'specimen_type';
+            typeInput.maxLength = 100;
+            typeInput.required = true;
+            typeLabel.append(typeText, typeInput);
+            form.appendChild(typeLabel);
+            const notesLabel = document.createElement('label');
+            const notesText = document.createElement('span');
+            notesText.textContent = 'Collection notes';
+            const notesInput = document.createElement('textarea');
+            notesInput.name = 'notes';
+            notesInput.maxLength = 10000;
+            notesLabel.append(notesText, notesInput);
+            form.appendChild(notesLabel);
+            const submit = document.createElement('button');
+            submit.type = 'submit';
+            submit.className = 'button button-primary';
+            submit.textContent = 'Record collection';
+            form.appendChild(submit);
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                if (!form.reportValidity()) return;
+                const formData = new FormData(form);
+                submit.disabled = true;
+                await updateSpecimen(order, action, {
+                    specimen_type: formData.get('specimen_type'),
+                    notes: formData.get('notes'),
+                }, submit);
+            });
+            return form;
+        }
+
+        function rejectionForm(order) {
+            const form = document.createElement('form');
+            form.className = 'testing-specimen-form';
+            const label = document.createElement('label');
+            const text = document.createElement('span');
+            text.textContent = 'Reason specimen is unsuitable';
+            const input = document.createElement('textarea');
+            input.name = 'rejection_reason';
+            input.maxLength = 10000;
+            input.required = true;
+            label.append(text, input);
+            form.appendChild(label);
+            const button = document.createElement('button');
+            button.type = 'submit';
+            button.className = 'button button-outline button-small';
+            button.textContent = 'Reject specimen';
+            form.appendChild(button);
+            form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                if (!form.reportValidity()) return;
+                button.disabled = true;
+                await updateSpecimen(order, 'reject', {
+                    rejection_reason: new FormData(form).get('rejection_reason'),
+                }, button);
+            });
+            return form;
+        }
+
+        function renderSpecimenActions(order) {
+            const target = document.querySelector('[data-specimen-actions]');
+            if (!target) return;
+            target.replaceChildren();
+            if (scope !== 'laboratory') return;
+            if (order.status === 'ordered' && order.desk_routed_at) {
+                target.appendChild(makeButton(
+                    'Receive order & begin collection',
+                    () => startOrder(order),
+                    'button button-primary'
+                ));
+                return;
+            }
+            if (order.status !== 'in_progress' || !order.specimen) return;
+            const status = order.specimen.status;
+            if (status === 'awaiting_collection') {
+                target.appendChild(specimenForm(order, 'collect'));
+                target.appendChild(rejectionForm(order));
+            } else if (status === 'collected') {
+                target.appendChild(makeButton(
+                    'Begin processing',
+                    () => updateSpecimen(order, 'processing'),
+                    'button button-primary'
+                ));
+                target.appendChild(rejectionForm(order));
+            } else if (status === 'processing') {
+                target.appendChild(rejectionForm(order));
+            } else if (status === 'rejected') {
+                target.appendChild(makeButton(
+                    'Start a new collection attempt',
+                    () => updateSpecimen(order, 'recollect'),
+                    'button button-primary'
+                ));
+            }
+        }
+
+        async function updateSpecimen(order, action, payload = {}, button = null) {
+            hideMessage();
+            if (button) button.disabled = true;
+            try {
+                await parseRequest(
+                    `/api/laboratory/orders/${order.test_order_id}/specimens`,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify({ action, ...payload }),
+                    },
+                    'Could not update specimen tracking.'
+                );
+                showMessage('Specimen tracking updated.', 'success');
+                await loadOrders();
+            } catch (error) {
+                showMessage(error.message);
+            } finally {
+                if (button) button.disabled = false;
+            }
         }
         results.forEach((result) => {
             const article = document.createElement('article');
@@ -457,7 +675,14 @@
         event.preventDefault();
         hideMessage();
         if (!resultForm.reportValidity() || !state.activeOrder) return;
-        if (!window.confirm('Save this final test result? The order will be marked completed.')) return;
+        const selectedStatus = resultForm.querySelector('[data-result-status]');
+        const resultStatus = scope === 'laboratory' ? selectedStatus.value : 'final';
+        const confirmation = resultStatus === 'preliminary'
+            ? 'Save this preliminary result entry? It will remain a draft for doctor review.'
+            : resultStatus === 'amended'
+                ? 'Append this additional result entry without changing the existing result?'
+                : 'Save this final test result? The order will be marked completed.';
+        if (!window.confirm(confirmation)) return;
         const button = resultForm.querySelector('[data-save-result]');
         button.disabled = true;
         button.dataset.originalText = button.textContent;
@@ -473,11 +698,16 @@
                         test_order_id: state.activeOrder.test_order_id,
                         result_text: formData.get('result_text'),
                         notes: formData.get('notes'),
+                        result_status: resultStatus,
                     }),
                 },
                 'Could not save this result.'
             );
-            showMessage('Final result saved. The doctor can review it from the visit record.', 'success');
+            showMessage(resultStatus === 'preliminary'
+                ? 'Preliminary result saved. It remains a draft.'
+                : resultStatus === 'amended'
+                    ? 'Additional result entry saved without overwriting prior results.'
+                    : 'Final result saved. The doctor can review it from the visit record.', 'success');
             await loadOrders();
         } catch (error) {
             showMessage(error.message);
@@ -491,6 +721,7 @@
         const search = document.querySelector('[data-order-search]');
         const status = document.querySelector('[data-status-filter]');
         const departmentFilter = document.querySelector('[data-department-filter]');
+        const testTypeFilter = document.querySelector('[data-test-type-filter]');
         if (search) {
             search.value = state.search;
             search.addEventListener('input', (event) => {
@@ -512,6 +743,12 @@
             departmentFilter.addEventListener('change', (event) => {
                 state.department = event.target.value;
                 renderOrders();
+            });
+        }
+        if (testTypeFilter) {
+            testTypeFilter.addEventListener('change', (event) => {
+                state.testType = event.target.value;
+                loadOrders();
             });
         }
     }

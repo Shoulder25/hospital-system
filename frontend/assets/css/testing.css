@@ -338,6 +338,49 @@
     border-color: #238a80;
 }
 
+.testing-specimen-form {
+    display: grid;
+    flex: 1 1 280px;
+    gap: 10px;
+    max-width: 520px;
+    border: 1px solid #e5edef;
+    border-radius: 10px;
+    padding: 14px;
+    background: #fbfdfd;
+}
+
+.testing-specimen-form label {
+    display: grid;
+    gap: 6px;
+    color: #334d57;
+    font-size: .88rem;
+    font-weight: 650;
+}
+
+.testing-specimen-form input,
+.testing-specimen-form textarea {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid #d9e3e7;
+    border-radius: 8px;
+    padding: 9px 10px;
+    color: #263d47;
+    background: #fff;
+    font: inherit;
+    font-weight: 400;
+}
+
+.testing-specimen-form textarea {
+    min-height: 76px;
+    resize: vertical;
+}
+
+.testing-specimen-form input:focus,
+.testing-specimen-form textarea:focus {
+    outline: 3px solid rgba(32, 139, 128, .15);
+    border-color: #238a80;
+}
+
 .testing-actions {
     display: flex;
     justify-content: flex-end;

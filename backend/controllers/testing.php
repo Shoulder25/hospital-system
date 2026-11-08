@@ -58,7 +58,8 @@ function testingOrderRows(
     PDO $database,
     string $scope,
     string $search,
-    string $status
+    string $status,
+    string $testType = ''
 ): array {
     $departments = testingDepartments();
     $departmentFilter = '';
@@ -67,10 +68,10 @@ function testingOrderRows(
         $validDepartmentConditions = [];
         foreach ($departments as $department => $configuration) {
             $placeholders = [];
-            foreach ($configuration['tests'] as $index => $testType) {
+            foreach ($configuration['tests'] as $index => $allowedTestType) {
                 $placeholder = 'desk_test_' . $department . '_' . $index;
                 $placeholders[] = ':' . $placeholder;
-                $parameters[$placeholder] = $testType;
+                $parameters[$placeholder] = $allowedTestType;
             }
             $validDepartmentConditions[] = '(t.department = \''
                 . $department . '\' AND t.test_type IN ('
@@ -86,13 +87,28 @@ function testingOrderRows(
         $parameters['department'] = $scope;
         $allowedTypes = $departments[$scope]['tests'];
         $typePlaceholders = [];
-        foreach ($allowedTypes as $index => $testType) {
+        foreach ($allowedTypes as $index => $allowedTestType) {
             $placeholder = 'test_type_' . $index;
             $typePlaceholders[] = ':' . $placeholder;
-            $parameters[$placeholder] = $testType;
+            $parameters[$placeholder] = $allowedTestType;
         }
         $departmentFilter .= ' AND t.test_type IN ('
             . implode(', ', $typePlaceholders) . ')';
+        if ($scope === 'laboratory') {
+            $departmentFilter .= ' AND t.testing_desk_routed_at IS NOT NULL';
+        }
+    }
+
+    $testTypeFilter = '';
+    if ($testType !== '') {
+        if (!isset($departments[$scope])
+            || !in_array($testType, $departments[$scope]['tests'], true)) {
+            jsonError('Select a test type supported by this department.', [
+                'test_type' => 'Choose a supported test type.',
+            ], 422);
+        }
+        $testTypeFilter = ' AND t.test_type = :selected_test_type';
+        $parameters['selected_test_type'] = $testType;
     }
 
     $statusFilter = ' AND t.status <> \'cancelled\'';
@@ -156,7 +172,7 @@ function testingOrderRows(
          LEFT JOIN test_results tr ON tr.test_order_id = t.test_order_id
          LEFT JOIN users recorder ON recorder.user_id = tr.recorded_by_user_id
          WHERE 1 = 1'
-            . $departmentFilter . $statusFilter . $searchFilter .
+            . $departmentFilter . $testTypeFilter . $statusFilter . $searchFilter .
         ' ORDER BY
             CASE t.status
                 WHEN \'ordered\' THEN 1
@@ -195,6 +211,8 @@ function testingOrderRows(
                 'ordered_by_role' => $row['ordered_by_role'],
                 'desk_routed_at' => $row['testing_desk_routed_at'],
                 'routed_by' => $row['routed_by'],
+                'specimen' => null,
+                'specimens' => [],
                 'results' => [],
             ];
         }
@@ -210,10 +228,58 @@ function testingOrderRows(
         }
     }
 
+    if ($scope === 'laboratory' && $orders !== []) {
+        $orderIds = array_keys($orders);
+        $placeholders = [];
+        $specimenParameters = [];
+        foreach ($orderIds as $index => $orderId) {
+            $placeholder = 'specimen_order_' . $index;
+            $placeholders[] = ':' . $placeholder;
+            $specimenParameters[$placeholder] = $orderId;
+        }
+        $specimenStatement = $database->prepare(
+            'SELECT specimen.lab_specimen_id, specimen.test_order_id,
+                    specimen.specimen_type, specimen.status,
+                    specimen.collected_at, specimen.rejection_reason,
+                    specimen.notes, specimen.updated_at,
+                    collected_by.display_name AS recorded_by,
+                    updated_by.display_name AS updated_by
+             FROM lab_specimens specimen
+             INNER JOIN users collected_by
+                ON collected_by.user_id = specimen.recorded_by_user_id
+             LEFT JOIN users updated_by
+                ON updated_by.user_id = specimen.updated_by_user_id
+             WHERE specimen.test_order_id IN (' . implode(', ', $placeholders) . ')
+             ORDER BY specimen.lab_specimen_id ASC'
+        );
+        $specimenStatement->execute($specimenParameters);
+        foreach ($specimenStatement->fetchAll() as $specimenRow) {
+            $orderId = (int) $specimenRow['test_order_id'];
+            $specimen = [
+                'lab_specimen_id' => (int) $specimenRow['lab_specimen_id'],
+                'type' => $specimenRow['specimen_type'],
+                'status' => $specimenRow['status'],
+                'collected_at' => $specimenRow['collected_at'],
+                'rejection_reason' => $specimenRow['rejection_reason'],
+                'notes' => $specimenRow['notes'],
+                'updated_at' => $specimenRow['updated_at'],
+                'recorded_by' => $specimenRow['recorded_by'],
+                'updated_by' => $specimenRow['updated_by'],
+            ];
+            $orders[$orderId]['specimens'][] = $specimen;
+            $orders[$orderId]['specimen'] = $specimen;
+        }
+    }
+
     return array_values($orders);
 }
 
-function handleTestingOrdersGet(string $scope, string $search, string $status): void
+function handleTestingOrdersGet(
+    string $scope,
+    string $search,
+    string $status,
+    string $testType = ''
+): void
 {
     $database = getDatabaseConnection();
     if ($scope === 'testing_desk') {
@@ -233,7 +299,7 @@ function handleTestingOrdersGet(string $scope, string $search, string $status): 
         ], 422);
     }
 
-    $orders = testingOrderRows($database, $scope, $search, $status);
+    $orders = testingOrderRows($database, $scope, $search, $status, $testType);
     $validTypeByDepartment = [];
     foreach (testingDepartments() as $department => $configuration) {
         $validTypeByDepartment[$department] = $configuration['tests'];
@@ -255,6 +321,10 @@ function handleTestingOrdersGet(string $scope, string $search, string $status): 
         if ($scope === 'testing_desk'
             && $countRow['status'] === 'ordered'
             && $countRow['testing_desk_routed_at'] !== null) {
+            continue;
+        }
+        if ($scope === 'laboratory'
+            && $countRow['testing_desk_routed_at'] === null) {
             continue;
         }
         if (!isset($validTypeByDepartment[$department])
@@ -337,6 +407,17 @@ function handleTestingDeskRoute(string $orderId): void
         if ($routeStatement->rowCount() !== 1) {
             $database->rollBack();
             jsonError('This test order has already been routed.', [], 409);
+        }
+        if ($department === 'laboratory') {
+            $specimenStatement = $database->prepare(
+                'INSERT INTO lab_specimens
+                    (test_order_id, status, recorded_by_user_id, updated_by_user_id)
+                 VALUES (:order_id, \'awaiting_collection\', :user_id, :user_id)'
+            );
+            $specimenStatement->execute([
+                'order_id' => (int) $orderId,
+                'user_id' => (int) $user['user_id'],
+            ]);
         }
         recordTestingAudit(
             $database,
@@ -425,6 +506,191 @@ function handleTestingOrderStart(string $department, string $orderId): void
     ]);
 }
 
+function handleLaboratorySpecimenUpdate(string $orderId): void
+{
+    if (!ctype_digit($orderId) || (int) $orderId < 1) {
+        jsonError('A valid test order ID is required.', [], 400);
+    }
+
+    $database = getDatabaseConnection();
+    $user = requireTestingAccess($database, ['laboratory_technician']);
+    requireCsrfRequest();
+    $input = readJsonRequest();
+    $action = $input['action'] ?? null;
+    if (!is_string($action)
+        || !in_array($action, ['collect', 'processing', 'reject', 'recollect'], true)) {
+        jsonError('Choose a valid specimen action.', [
+            'action' => 'Select collect, processing, reject, or recollect.',
+        ], 422);
+    }
+
+    $specimenType = $input['specimen_type'] ?? null;
+    $rejectionReason = $input['rejection_reason'] ?? null;
+    $notes = $input['notes'] ?? null;
+    $errors = [];
+    if ($action === 'collect'
+        && (!is_string($specimenType) || trim($specimenType) === ''
+            || strlen(trim($specimenType)) > 100)) {
+        $errors['specimen_type'] = 'Enter a specimen type of up to 100 characters.';
+    }
+    if ($action === 'reject'
+        && (!is_string($rejectionReason) || trim($rejectionReason) === ''
+            || strlen(trim($rejectionReason)) > 10000)) {
+        $errors['rejection_reason'] = 'Enter a rejection reason of up to 10000 characters.';
+    }
+    if ($notes !== null
+        && (!is_string($notes) || strlen(trim($notes)) > 10000)) {
+        $errors['notes'] = 'Notes must be text of 10000 characters or fewer.';
+    }
+    if ($errors !== []) {
+        jsonError('Please correct the specimen information.', $errors, 422);
+    }
+
+    try {
+        $database->beginTransaction();
+        $order = testingOrderForUpdate($database, (int) $orderId);
+        if ($order['department'] !== 'laboratory'
+            || !in_array($order['test_type'], testingDepartments()['laboratory']['tests'], true)) {
+            $database->rollBack();
+            jsonError('This order is not a laboratory investigation.', [], 403);
+        }
+        if ($order['status'] !== 'in_progress') {
+            $database->rollBack();
+            jsonError('Start the laboratory order before updating its specimen.', [], 409);
+        }
+
+        $latestStatement = $database->prepare(
+            'SELECT lab_specimen_id, status
+             FROM lab_specimens
+             WHERE test_order_id = :order_id
+             ORDER BY lab_specimen_id DESC
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $latestStatement->execute(['order_id' => (int) $orderId]);
+        $specimen = $latestStatement->fetch();
+        if ($specimen === false) {
+            $database->rollBack();
+            jsonError('No specimen collection attempt exists for this order.', [], 409);
+        }
+
+        $userId = (int) $user['user_id'];
+        $specimenId = (int) $specimen['lab_specimen_id'];
+        $specimenStatus = $specimen['status'];
+        if ($action === 'recollect') {
+            if ($specimenStatus !== 'rejected') {
+                $database->rollBack();
+                jsonError('A new collection can only follow a rejected specimen.', [], 409);
+            }
+            $insertStatement = $database->prepare(
+                'INSERT INTO lab_specimens
+                    (test_order_id, status, recorded_by_user_id, updated_by_user_id)
+                 VALUES (:order_id, \'awaiting_collection\', :user_id, :user_id)'
+            );
+            $insertStatement->execute([
+                'order_id' => (int) $orderId,
+                'user_id' => $userId,
+            ]);
+            $specimenId = (int) $database->lastInsertId();
+            $specimenStatus = 'awaiting_collection';
+        } else {
+            $allowedTransitions = [
+                'collect' => ['awaiting_collection'],
+                'processing' => ['collected'],
+                'reject' => ['awaiting_collection', 'collected', 'processing'],
+            ];
+            if (!in_array($specimenStatus, $allowedTransitions[$action], true)) {
+                $database->rollBack();
+                jsonError('This specimen is not in a state that allows that action.', [], 409);
+            }
+
+            if ($action === 'collect') {
+                $updateStatement = $database->prepare(
+                    'UPDATE lab_specimens
+                     SET specimen_type = :specimen_type,
+                         status = \'collected\',
+                         collected_at = CURRENT_TIMESTAMP,
+                         rejection_reason = NULL,
+                         notes = :notes,
+                         updated_by_user_id = :user_id
+                     WHERE lab_specimen_id = :specimen_id
+                       AND status = \'awaiting_collection\''
+                );
+                $updateStatement->execute([
+                    'specimen_type' => trim((string) $specimenType),
+                    'notes' => is_string($notes) && trim($notes) !== ''
+                        ? trim($notes)
+                        : null,
+                    'user_id' => $userId,
+                    'specimen_id' => $specimenId,
+                ]);
+                $specimenStatus = 'collected';
+            } elseif ($action === 'processing') {
+                $updateStatement = $database->prepare(
+                    'UPDATE lab_specimens
+                     SET status = \'processing\',
+                         notes = COALESCE(:notes, notes),
+                         updated_by_user_id = :user_id
+                     WHERE lab_specimen_id = :specimen_id
+                       AND status = \'collected\''
+                );
+                $updateStatement->execute([
+                    'notes' => is_string($notes) && trim($notes) !== ''
+                        ? trim($notes)
+                        : null,
+                    'user_id' => $userId,
+                    'specimen_id' => $specimenId,
+                ]);
+                $specimenStatus = 'processing';
+            } else {
+                $updateStatement = $database->prepare(
+                    'UPDATE lab_specimens
+                     SET status = \'rejected\',
+                         rejection_reason = :reason,
+                         notes = COALESCE(:notes, notes),
+                         updated_by_user_id = :user_id
+                     WHERE lab_specimen_id = :specimen_id
+                       AND status IN (\'awaiting_collection\', \'collected\', \'processing\')'
+                );
+                $updateStatement->execute([
+                    'reason' => trim((string) $rejectionReason),
+                    'notes' => is_string($notes) && trim($notes) !== ''
+                        ? trim($notes)
+                        : null,
+                    'user_id' => $userId,
+                    'specimen_id' => $specimenId,
+                ]);
+                $specimenStatus = 'rejected';
+            }
+            if ($updateStatement->rowCount() !== 1) {
+                $database->rollBack();
+                jsonError('The specimen was changed by another user. Refresh and try again.', [], 409);
+            }
+        }
+
+        recordTestingAudit(
+            $database,
+            $userId,
+            'laboratory.specimen.' . $action,
+            (int) $order['patient_id'],
+            (int) $order['visit_id']
+        );
+        $database->commit();
+    } catch (Throwable $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        error_log('Laboratory specimen update failed: ' . $exception->getMessage());
+        jsonError('Unable to update specimen tracking right now.', [], 500);
+    }
+
+    jsonSuccess('Specimen tracking updated.', [
+        'test_order_id' => (int) $orderId,
+        'lab_specimen_id' => $specimenId,
+        'status' => $specimenStatus,
+    ]);
+}
+
 function handleTestingResultCreate(string $department): void
 {
     $departments = testingDepartments();
@@ -445,6 +711,7 @@ function handleTestingResultCreate(string $department): void
     }
     $resultText = $input['result_text'] ?? null;
     $notes = $input['notes'] ?? null;
+    $resultStatus = $input['result_status'] ?? 'final';
     $errors = [];
     if (!is_string($resultText) || trim($resultText) === ''
         || strlen(trim($resultText)) > 50000) {
@@ -453,6 +720,13 @@ function handleTestingResultCreate(string $department): void
     if ($notes !== null
         && (!is_string($notes) || strlen(trim($notes)) > 10000)) {
         $errors['notes'] = 'Notes must be text of 10000 characters or fewer.';
+    }
+    $allowedResultStatuses = $department === 'laboratory'
+        ? ['preliminary', 'final', 'amended']
+        : ['final'];
+    if (!is_string($resultStatus)
+        || !in_array($resultStatus, $allowedResultStatuses, true)) {
+        $errors['result_status'] = 'Choose a result status supported by this department.';
     }
     if ($errors !== []) {
         jsonError('Please correct the test result.', $errors, 422);
@@ -466,27 +740,57 @@ function handleTestingResultCreate(string $department): void
             $database->rollBack();
             jsonError('This test order belongs to another department.', [], 403);
         }
-        if ($order['status'] !== 'in_progress') {
+        if ($resultStatus === 'amended') {
+            if ($department !== 'laboratory' || $order['status'] !== 'completed') {
+                $database->rollBack();
+                jsonError('Only completed laboratory orders accept added result entries.', [], 409);
+            }
+        } elseif ($order['status'] !== 'in_progress') {
             $database->rollBack();
             jsonError('Start the test before recording its result.', [], 409);
         }
-        $existingResult = $database->prepare(
-            'SELECT test_result_id FROM test_results
-             WHERE test_order_id = :order_id
-               AND status IN (\'final\', \'amended\')
-             LIMIT 1'
-        );
-        $existingResult->execute(['order_id' => (int) $orderId]);
-        if ($existingResult->fetchColumn() !== false) {
-            $database->rollBack();
-            jsonError('A final result already exists for this test order.', [], 409);
+
+        if ($resultStatus === 'final' || $resultStatus === 'amended') {
+            $existingFinal = $database->prepare(
+                'SELECT test_result_id FROM test_results
+                 WHERE test_order_id = :order_id AND status = \'final\'
+                 LIMIT 1'
+            );
+            $existingFinal->execute(['order_id' => (int) $orderId]);
+            $hasFinal = $existingFinal->fetchColumn() !== false;
+            if ($resultStatus === 'final' && $hasFinal) {
+                $database->rollBack();
+                jsonError('A final result already exists for this test order.', [], 409);
+            }
+            if ($resultStatus === 'amended' && !$hasFinal) {
+                $database->rollBack();
+                jsonError('A final result is required before adding a result entry.', [], 409);
+            }
+        }
+
+        if ($department === 'laboratory'
+            && ($resultStatus === 'preliminary' || $resultStatus === 'final')) {
+            $specimenStatement = $database->prepare(
+                'SELECT lab_specimen_id, status
+                 FROM lab_specimens
+                 WHERE test_order_id = :order_id
+                 ORDER BY lab_specimen_id DESC
+                 LIMIT 1
+                 FOR UPDATE'
+            );
+            $specimenStatement->execute(['order_id' => (int) $orderId]);
+            $specimen = $specimenStatement->fetch();
+            if ($specimen === false || $specimen['status'] !== 'processing') {
+                $database->rollBack();
+                jsonError('A specimen must be in processing before results can be recorded.', [], 409);
+            }
         }
 
         $insertStatement = $database->prepare(
             'INSERT INTO test_results
                 (test_order_id, recorded_by_user_id, result_text, result_notes, status)
              VALUES
-                (:order_id, :user_id, :result_text, :result_notes, \'final\')'
+                (:order_id, :user_id, :result_text, :result_notes, :result_status)'
         );
         $insertStatement->execute([
             'order_id' => (int) $orderId,
@@ -495,18 +799,36 @@ function handleTestingResultCreate(string $department): void
             'result_notes' => is_string($notes) && trim($notes) !== ''
                 ? trim($notes)
                 : null,
+            'result_status' => $resultStatus,
         ]);
         $resultId = (int) $database->lastInsertId();
 
-        $completeStatement = $database->prepare(
-            'UPDATE test_orders
-             SET status = \'completed\'
-             WHERE test_order_id = :order_id AND status = \'in_progress\''
-        );
-        $completeStatement->execute(['order_id' => (int) $orderId]);
-        if ($completeStatement->rowCount() !== 1) {
-            $database->rollBack();
-            jsonError('This test order is no longer in progress.', [], 409);
+        if ($resultStatus === 'final') {
+            $completeStatement = $database->prepare(
+                'UPDATE test_orders
+                 SET status = \'completed\'
+                 WHERE test_order_id = :order_id AND status = \'in_progress\''
+            );
+            $completeStatement->execute(['order_id' => (int) $orderId]);
+            if ($completeStatement->rowCount() !== 1) {
+                $database->rollBack();
+                jsonError('This test order is no longer in progress.', [], 409);
+            }
+            if ($department === 'laboratory') {
+                $completeSpecimen = $database->prepare(
+                    'UPDATE lab_specimens
+                     SET status = \'completed\', updated_by_user_id = :user_id
+                     WHERE lab_specimen_id = :specimen_id AND status = \'processing\''
+                );
+                $completeSpecimen->execute([
+                    'user_id' => (int) $user['user_id'],
+                    'specimen_id' => (int) $specimen['lab_specimen_id'],
+                ]);
+                if ($completeSpecimen->rowCount() !== 1) {
+                    $database->rollBack();
+                    jsonError('The specimen is no longer in processing.', [], 409);
+                }
+            }
         }
         $testFeeCodes = [
             'blood' => 'TEST_BLOOD_DEMO',
@@ -520,19 +842,21 @@ function handleTestingResultCreate(string $department): void
         if (!isset($testFeeCodes[$order['test_type']])) {
             throw new RuntimeException('No demo fee is configured for this test type.');
         }
-        $bill = billingGetOrCreateBill($database, (int) $order['visit_id']);
-        billingAddFeeItemOnce(
-            $database,
-            (int) $bill['bill_id'],
-            $testFeeCodes[$order['test_type']],
-            'test',
-            (int) $orderId
-        );
-        billingRefreshBillTotal($database, (int) $bill['bill_id']);
+        if ($resultStatus === 'final') {
+            $bill = billingGetOrCreateBill($database, (int) $order['visit_id']);
+            billingAddFeeItemOnce(
+                $database,
+                (int) $bill['bill_id'],
+                $testFeeCodes[$order['test_type']],
+                'test',
+                (int) $orderId
+            );
+            billingRefreshBillTotal($database, (int) $bill['bill_id']);
+        }
         recordTestingAudit(
             $database,
             (int) $user['user_id'],
-            $department . '.result.recorded',
+            $department . '.result.' . $resultStatus,
             (int) $order['patient_id'],
             (int) $order['visit_id']
         );
@@ -549,6 +873,7 @@ function handleTestingResultCreate(string $department): void
         'test_result_id' => $resultId,
         'test_order_id' => (int) $orderId,
         'visit_id' => (int) $order['visit_id'],
-        'status' => 'completed',
+        'result_status' => $resultStatus,
+        'status' => $resultStatus === 'final' ? 'completed' : $order['status'],
     ], 201);
 }

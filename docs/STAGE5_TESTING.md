@@ -11,11 +11,16 @@ Person 3's final specification.
 The additive migration
 [`database/migrations/20261107_stage5_testing.sql`](../database/migrations/20261107_stage5_testing.sql)
 adds desk-routing metadata to `test_orders` and separate notes to
-`test_results`. It creates no tables and preserves existing orders/results.
-Run it once on an existing database from the project root:
+`test_results`. The Laboratory specimen migration
+[`database/migrations/20261108_laboratory_specimens.sql`](../database/migrations/20261108_laboratory_specimens.sql)
+adds specimen collection attempts and the staff member responsible for the
+latest update. Run both migrations once on an existing database from the
+project root:
 
 ```powershell
 Get-Content -Raw database\migrations\20261107_stage5_testing.sql |
+  & C:\xampp\mysql\bin\mysql.exe -u root hospital_system
+Get-Content -Raw database\migrations\20261108_laboratory_specimens.sql |
   & C:\xampp\mysql\bin\mysql.exe -u root hospital_system
 ```
 
@@ -35,7 +40,16 @@ Sign in before visiting a department page:
   - Completed: `http://localhost/hospital-system/frontend/testing-desk/completed.php`
   - Order details: `http://localhost/hospital-system/frontend/testing-desk/order-details.php?order_id={id}`
   - History: `http://localhost/hospital-system/frontend/testing-desk/history.php`
-- Laboratory: `http://localhost/hospital-system/frontend/laboratory/index.php`
+- Laboratory pages:
+  - Dashboard: `http://localhost/hospital-system/frontend/laboratory/index.php`
+  - Incoming orders: `http://localhost/hospital-system/frontend/laboratory/orders.php`
+  - Pending collection: `http://localhost/hospital-system/frontend/laboratory/pending.php`
+  - Specimens: `http://localhost/hospital-system/frontend/laboratory/specimens.php`
+  - Processing: `http://localhost/hospital-system/frontend/laboratory/processing.php`
+  - Results: `http://localhost/hospital-system/frontend/laboratory/results.php`
+  - Completed: `http://localhost/hospital-system/frontend/laboratory/completed.php`
+  - History: `http://localhost/hospital-system/frontend/laboratory/history.php`
+  - Order details: `http://localhost/hospital-system/frontend/laboratory/order-details.php?order_id={id}`
 - Radiology: `http://localhost/hospital-system/frontend/radiology/index.php`
 - Cardiac: `http://localhost/hospital-system/frontend/cardiac/index.php`
 
@@ -65,6 +79,17 @@ create a new order; each order receives its own charge, while previous orders,
 results, and charges remain intact. Completed results are available to the
 doctor, who remains responsible for interpretation and diagnosis.
 
+For Laboratory, receiving an order creates an `awaiting_collection` specimen
+attempt. The technician records the specimen type and server collection time,
+then moves it through `collected` and `processing`. Unsuitable specimens require
+a reason; recollection creates a new attempt and does not erase the rejected
+attempt. The authenticated technician is recorded for each update. Final
+results mark the current specimen and order completed and use the existing
+test-fee transaction. Preliminary result entries are retained as drafts and are
+not presented as completed results to the doctor. Additional authors can append
+result entries to completed orders as `amended`; earlier entries remain
+unchanged. This project has no separate result-verifier role.
+
 ## API
 
 Use the central `backend/index.php` entry point, existing PHP session cookie,
@@ -76,7 +101,8 @@ and JSON request/response format.
 | POST | `/api/testing-desk/orders/{id}/route` | Testing desk clerk, administrator + CSRF | Record that the patient was routed to the ordered department |
 | GET | `/api/laboratory/orders?search=&status=` | Laboratory technician, administrator | List laboratory orders |
 | POST | `/api/laboratory/orders/{id}/start` | Laboratory technician, administrator + CSRF | Mark a routed lab order in progress |
-| POST | `/api/laboratory/results` | Laboratory technician, administrator + CSRF | Record a result for a lab order |
+| POST | `/api/laboratory/orders/{id}/specimens` | Laboratory technician, administrator + CSRF | Collect, process, reject, or start a new collection attempt |
+| POST | `/api/laboratory/results` | Laboratory technician, administrator + CSRF | Append a preliminary, final, or amended lab result |
 | GET | `/api/radiology/orders?search=&status=` | Radiographer, administrator | List X-ray orders |
 | POST | `/api/radiology/orders/{id}/start` | Radiographer, administrator + CSRF | Mark a routed X-ray order in progress |
 | POST | `/api/radiology/results` | Radiographer, administrator + CSRF | Record an X-ray report |
@@ -85,7 +111,9 @@ and JSON request/response format.
 | POST | `/api/cardiac/results` | Cardiac technician, administrator + CSRF | Record ECG findings |
 
 `search` matches patient number/name, visit ID, or order ID. `status` may be
-`all`, `ordered`, `in_progress`, `completed`, or `cancelled`.
+`all`, `ordered`, `in_progress`, `completed`, or `cancelled`. The Laboratory
+list also accepts `test_type` (`blood`, `glucose`, `urine`, `pregnancy`, or
+`pap_smear`).
 
 To record a result, send:
 
@@ -93,15 +121,31 @@ To record a result, send:
 {
   "test_order_id": 25,
   "result_text": "Fictional test result",
-  "notes": "Optional notes"
+  "notes": "Optional notes",
+  "result_status": "final"
 }
 ```
 
-The order must belong to the caller's department, be desk-routed, and have
-status `in_progress`. The result text is required; notes are optional. A
-successful result is stored as final, marks the order completed, and returns
-HTTP 201. Invalid input returns HTTP 422; missing orders return HTTP 404;
-wrong-department, workflow, and duplicate-result requests are rejected.
+For Laboratory, `result_status` may be `preliminary`, `final`, or `amended`.
+Preliminary entries are append-only and leave the order in progress. A final
+result requires a specimen in processing and completes the order. An amended
+entry requires an existing final result and a completed order; it preserves the
+existing results and does not create another test charge. Radiology and Cardiac
+continue to accept final results only. Invalid input returns HTTP 422; missing
+orders return HTTP 404; wrong-department, workflow, and duplicate-final
+requests are rejected.
+
+Specimen requests use the following JSON shapes:
+
+```json
+{"action": "collect", "specimen_type": "value recorded by the technician"}
+{"action": "processing"}
+{"action": "reject", "rejection_reason": "Reason recorded by the technician"}
+{"action": "recollect"}
+```
+
+The collection timestamp is generated by the server. `recollect` is allowed
+only after rejection and creates a separate specimen attempt.
 
 ## XAMPP and Postman checks
 

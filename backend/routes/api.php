@@ -69,6 +69,7 @@ function dispatchApiRequest(string $method, string $path): void
     $testingDepartment = null;
     $testingOrderId = null;
     $testingAction = null;
+    $laboratorySpecimenOrderId = null;
     $billingVisitId = null;
     $billingVisitAction = null;
     $billingBillId = null;
@@ -148,6 +149,14 @@ function dispatchApiRequest(string $method, string $path): void
         $testingDepartment = $matches[1];
         $testingOrderId = $matches[2];
         $testingAction = 'start';
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/laboratory/orders/([0-9]+)/specimens$#',
+        $path,
+        $matches
+    )) {
+        $laboratorySpecimenOrderId = $matches[1];
         $routes[$path] = ['POST'];
     }
     if (preg_match(
@@ -430,6 +439,8 @@ function dispatchApiRequest(string $method, string $path): void
             handleTestingDeskRoute($testingDeskOrderId);
         } elseif ($testingOrderId !== null && $testingAction === 'start') {
             handleTestingOrderStart($testingDepartment, $testingOrderId);
+        } elseif ($laboratorySpecimenOrderId !== null) {
+            handleLaboratorySpecimenUpdate($laboratorySpecimenOrderId);
         } elseif ($billingVisitId !== null) {
             if ($billingVisitAction === 'ticket-payment') {
                 handleBillingTicketPaymentCreate($billingVisitId);
@@ -599,16 +610,18 @@ function dispatchApiRequest(string $method, string $path): void
         )) {
             $search = $_GET['search'] ?? '';
             $status = $_GET['status'] ?? '';
-            if (!is_string($search) || !is_string($status)) {
+            $testType = $_GET['test_type'] ?? '';
+            if (!is_string($search) || !is_string($status) || !is_string($testType)) {
                 jsonError('Search and status filters must be strings.', [
                     'search' => 'Enter plain text to search.',
                     'status' => 'Choose a supported order status.',
+                    'test_type' => 'Choose a supported test type.',
                 ], 422);
             }
             $scope = $path === '/api/testing-desk/orders'
                 ? 'testing_desk'
                 : substr($path, strlen('/api/'), -strlen('/orders'));
-            handleTestingOrdersGet($scope, $search, $status);
+            handleTestingOrdersGet($scope, $search, $status, $testType);
         } elseif (in_array(
             $path,
             ['/api/laboratory/results', '/api/radiology/results', '/api/cardiac/results'],
