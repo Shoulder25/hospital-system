@@ -407,6 +407,9 @@ function handleRadiologyFileGet(string $fileId): void
     if (!in_array($role, [
         'radiographer',
         'general_doctor',
+        'emergency_doctor',
+        'resident_specialist',
+        'locum_specialist',
         'system_administrator',
     ], true)) {
         jsonError('You are not authorized to view radiology files.', [], 403);
@@ -435,7 +438,7 @@ function handleRadiologyFileGet(string $fileId): void
     if ($file === false || $file['deleted_at'] !== null) {
         jsonError('Radiology file not found.', [], 404);
     }
-    if ($role === 'general_doctor'
+    if (!in_array($role, ['radiographer', 'system_administrator'], true)
         && ($file['order_status'] !== 'completed'
             || !(bool) $file['has_submitted_report'])) {
         jsonError('This radiology file is available to doctors after the report is submitted.', [], 403);

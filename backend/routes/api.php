@@ -181,7 +181,7 @@ function dispatchApiRequest(string $method, string $path): void
     )) {
         $radiologyFileId = $matches[1];
         $radiologyFileAction = $matches[2] ?? '';
-        $routes[$path] = $radiologyFileAction === '' ? ['GET'] : ['DELETE'];
+        $routes[$path] = $radiologyFileAction === '' ? ['GET', 'DELETE'] : ['DELETE', 'POST'];
     }
     if (preg_match(
         '#^/api/cardiac/orders/([0-9]+)/files$#',
@@ -489,7 +489,7 @@ function dispatchApiRequest(string $method, string $path): void
         } elseif ($radiologyOrderFilesId !== null) {
             handleRadiologyFilesUpload($radiologyOrderFilesId);
         } elseif ($radiologyFileId !== null) {
-            if ($radiologyFileAction === 'delete') {
+            if ($radiologyFileAction === 'delete' || $method === 'DELETE') {
                 handleRadiologyFileDelete($radiologyFileId);
             } else {
                 handleRadiologyFileGet($radiologyFileId);

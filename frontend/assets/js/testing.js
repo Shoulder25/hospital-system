@@ -212,9 +212,11 @@
 
         if (scope === 'radiology') {
             if (page === 'imaging') {
-                action.appendChild(orderLink(order, 'Manage images', 'imaging.php'));
+                action.appendChild(makeButton('Manage images', () => openOrder(order)));
             } else if (order.status === 'ordered' && !order.desk_routed_at) {
                 action.textContent = 'Awaiting Testing Centre';
+            } else if (order.status === 'ordered') {
+                action.appendChild(makeButton('Start examination', () => startOrder(order)));
             } else {
                 action.appendChild(makeButton(
                     order.status === 'completed' ? 'View report and images' : 'Open examination',
@@ -512,6 +514,24 @@
                     note.className = 'testing-empty';
                     note.textContent = 'This order is not eligible for routing.';
                     deskActions.appendChild(note);
+                }
+            }
+        }
+        const radiologyActions = document.querySelector('[data-radiology-actions]');
+        if (radiologyActions) {
+            radiologyActions.replaceChildren();
+            if (scope === 'radiology') {
+                if (order.status === 'ordered' && order.desk_routed_at) {
+                    radiologyActions.appendChild(makeButton(
+                        'Start examination',
+                        () => startOrder(order),
+                        'button button-primary'
+                    ));
+                } else if (order.status === 'ordered' && !order.desk_routed_at) {
+                    const note = document.createElement('p');
+                    note.className = 'testing-empty';
+                    note.textContent = 'This order must be routed by the Testing Centre before starting examination.';
+                    radiologyActions.appendChild(note);
                 }
             }
         }

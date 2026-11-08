@@ -160,7 +160,8 @@
             ['Order history', 'laboratory/history.php', 'Testing'],
         ],
         radiographer: [
-            ['Radiology', 'radiology/index.php', 'Testing'],
+            ['Radiology orders', 'radiology/index.php', 'Testing'],
+            ['Manage images', 'radiology/imaging.php', 'Testing'],
         ],
         cardiac_technician: [
             ['ECG dashboard', 'cardiac/index.php', 'Cardiac'],
@@ -222,7 +223,8 @@
         ['Laboratory completed orders', 'laboratory/completed.php', 'Testing'],
         ['Laboratory order details', 'laboratory/order-details.php', 'Testing'],
         ['Laboratory order history', 'laboratory/history.php', 'Testing'],
-        ['Radiology', 'radiology/index.php', 'Testing'],
+        ['Radiology orders', 'radiology/index.php', 'Testing'],
+        ['Radiology image management', 'radiology/imaging.php', 'Testing'],
         ['ECG dashboard', 'cardiac/index.php', 'Cardiac'],
         ['Incoming ECG orders', 'cardiac/orders.php', 'Cardiac'],
         ['Pending ECG examinations', 'cardiac/pending.php', 'Cardiac'],

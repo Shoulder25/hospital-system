@@ -94,9 +94,7 @@ function testingOrderRows(
         }
         $departmentFilter .= ' AND t.test_type IN ('
             . implode(', ', $typePlaceholders) . ')';
-        if ($scope === 'laboratory') {
-            $departmentFilter .= ' AND t.testing_desk_routed_at IS NOT NULL';
-        } elseif ($scope === 'cardiac') {
+        if (in_array($scope, ['laboratory', 'radiology', 'cardiac'], true)) {
             $departmentFilter .= ' AND t.testing_desk_routed_at IS NOT NULL';
         }
     }
@@ -360,11 +358,7 @@ function handleTestingOrdersGet(
             && $countRow['testing_desk_routed_at'] !== null) {
             continue;
         }
-        if ($scope === 'laboratory'
-            && $countRow['testing_desk_routed_at'] === null) {
-            continue;
-        }
-        if ($scope === 'cardiac'
+        if (in_array($scope, ['laboratory', 'radiology', 'cardiac'], true)
             && $countRow['testing_desk_routed_at'] === null) {
             continue;
         }
