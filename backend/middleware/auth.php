@@ -77,7 +77,8 @@ function getAuthenticatedUser(PDO $database): ?array
     }
 
     $statement = $database->prepare(
-        'SELECT u.user_id, u.username, u.display_name, r.role_id, r.role_name
+        'SELECT u.user_id, u.username, u.display_name, u.must_change_password,
+                r.role_id, r.role_name
          FROM users u
          INNER JOIN roles r ON r.role_id = u.role_id
          WHERE u.user_id = :user_id AND u.is_active = 1
@@ -95,9 +96,18 @@ function publicUserDetails(array $user): array
         'user_id' => (int) $user['user_id'],
         'username' => $user['username'],
         'display_name' => $user['display_name'],
+        'must_change_password' => (bool) ($user['must_change_password'] ?? false),
         'role' => [
             'id' => (int) $user['role_id'],
             'name' => $user['role_name'],
         ],
     ];
+}
+
+function redirectIfPasswordChangeRequired(array $user): void
+{
+    if (!empty($user['must_change_password'])) {
+        header('Location: ' . getProjectBasePath() . '/frontend/change-password.php');
+        exit;
+    }
 }

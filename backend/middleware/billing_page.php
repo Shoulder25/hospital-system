@@ -30,6 +30,7 @@ function requireBillingPage(bool $allowReception = false): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
 
     $allowedRoles = ['cashier', 'system_administrator'];
     if ($allowReception) {

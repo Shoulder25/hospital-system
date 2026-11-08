@@ -30,6 +30,7 @@ function requireSpecialistPage(): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
     if (!in_array($user['role_name'], [
         'resident_specialist',
         'locum_specialist',

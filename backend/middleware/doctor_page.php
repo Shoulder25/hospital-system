@@ -30,6 +30,7 @@ function requireDoctorPage(): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
 
     if (!in_array($user['role_name'], ['general_doctor', 'system_administrator'], true)) {
         http_response_code(403);

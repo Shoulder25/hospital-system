@@ -30,6 +30,7 @@ function requireEmergencyPage(): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
     if (!in_array(
         $user['role_name'],
         ['emergency_doctor', 'emergency_nurse', 'system_administrator'],

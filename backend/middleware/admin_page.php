@@ -31,6 +31,7 @@ function requireAdministratorPage(): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
 
     if ($user['role_name'] !== 'system_administrator') {
         http_response_code(403);

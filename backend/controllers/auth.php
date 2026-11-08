@@ -71,7 +71,7 @@ function handleAuthLogin(): void
         $database = getDatabaseConnection();
         $statement = $database->prepare(
             'SELECT u.user_id, u.username, u.password_hash, u.display_name,
-                    u.is_active, r.role_id, r.role_name
+                    u.is_active, u.must_change_password, r.role_id, r.role_name
              FROM users u
              INNER JOIN roles r ON r.role_id = u.role_id
              WHERE u.username = :username
@@ -103,6 +103,72 @@ function handleAuthLogin(): void
     jsonSuccess('Login successful.', [
         'user' => publicUserDetails($user),
         'csrf_token' => $_SESSION['csrf_token'],
+    ]);
+}
+
+function handleAuthChangePassword(): void
+{
+    $database = getDatabaseConnection();
+    $user = getAuthenticatedUser($database);
+    if ($user === null) {
+        jsonError('Authentication is required.', [], 401);
+    }
+    if (empty($user['must_change_password'])) {
+        jsonError('A temporary password is not awaiting a change.', [], 409);
+    }
+    requireCsrfRequest();
+
+    $input = readJsonRequest();
+    $password = $input['password'] ?? null;
+    if (!is_string($password) || strlen($password) < 12 || strlen($password) > 4096) {
+        jsonError('Choose a password between 12 and 4096 characters.', [
+            'password' => 'Use at least 12 characters.',
+        ], 422);
+    }
+
+    $database->beginTransaction();
+    try {
+        $currentPassword = $database->prepare(
+            'SELECT password_hash FROM users WHERE user_id = :user_id FOR UPDATE'
+        );
+        $currentPassword->execute(['user_id' => (int) $user['user_id']]);
+        $currentHash = $currentPassword->fetchColumn();
+        if (is_string($currentHash) && password_verify($password, $currentHash)) {
+            $database->rollBack();
+            jsonError('Choose a password different from your temporary password.', [
+                'password' => 'Enter a new password.',
+            ], 422);
+        }
+
+        $update = $database->prepare(
+            'UPDATE users
+             SET password_hash = :password_hash, must_change_password = 0
+             WHERE user_id = :user_id'
+        );
+        $update->execute([
+            'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+            'user_id' => (int) $user['user_id'],
+        ]);
+
+        $audit = $database->prepare(
+            'INSERT INTO audit_log (user_id, action)
+             VALUES (:user_id, :action)'
+        );
+        $audit->execute([
+            'user_id' => (int) $user['user_id'],
+            'action' => 'staff.password_changed:' . (int) $user['user_id'],
+        ]);
+        $database->commit();
+    } catch (PDOException $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        error_log('Staff password change failed: ' . $exception->getMessage());
+        jsonError('Unable to change your password right now.', [], 500);
+    }
+
+    jsonSuccess('Password changed successfully.', [
+        'csrf_token' => getCsrfToken(),
     ]);
 }
 
@@ -157,9 +223,10 @@ function handleAuthMe(): void
 
 function handleAuthRegister(): void
 {
+    $admin = null;
     try {
         $database = getDatabaseConnection();
-        requireAdministrator($database);
+        $admin = requireAdministrator($database);
     } catch (PDOException $exception) {
         error_log('Staff registration authorization lookup failed: '
             . $exception->getMessage());
@@ -226,9 +293,11 @@ function handleAuthRegister(): void
             ], 422);
         }
 
+        $database->beginTransaction();
         $insertStatement = $database->prepare(
-            'INSERT INTO users (role_id, username, password_hash, display_name, is_active)
-             VALUES (:role_id, :username, :password_hash, :display_name, 1)'
+            'INSERT INTO users
+                (role_id, username, password_hash, display_name, is_active, must_change_password)
+             VALUES (:role_id, :username, :password_hash, :display_name, 1, 1)'
         );
         $insertStatement->execute([
             'role_id' => (int) $role['role_id'],
@@ -236,10 +305,20 @@ function handleAuthRegister(): void
             'password_hash' => password_hash($password, PASSWORD_DEFAULT),
             'display_name' => trim($displayName),
         ]);
+        $createdUserId = (int) $database->lastInsertId();
+        $audit = $database->prepare(
+            'INSERT INTO audit_log (user_id, action)
+             VALUES (:user_id, :action)'
+        );
+        $audit->execute([
+            'user_id' => (int) $admin['user_id'],
+            'action' => 'admin.staff.created:' . $createdUserId,
+        ]);
+        $database->commit();
 
         jsonSuccess('Staff account created.', [
             'user' => [
-                'user_id' => (int) $database->lastInsertId(),
+                'user_id' => $createdUserId,
                 'username' => $username,
                 'display_name' => trim($displayName),
                 'role' => [
@@ -250,6 +329,9 @@ function handleAuthRegister(): void
             ],
         ], 201);
     } catch (PDOException $exception) {
+        if (isset($database) && $database->inTransaction()) {
+            $database->rollBack();
+        }
         if ($exception->getCode() === '23000') {
             jsonError('That username is already in use.', [
                 'username' => 'Choose a different username.',

@@ -111,6 +111,10 @@
         try {
             const user = await currentSession();
             if (user) {
+                if (user.must_change_password) {
+                    window.location.replace(`${projectBase}frontend/change-password.php`);
+                    return;
+                }
                 const destination = dashboardForRole(user.role.name);
                 window.location.replace(`${projectBase}${destination}`);
                 return;
@@ -144,6 +148,10 @@
                 }
 
                 csrfToken = payload.data.csrf_token;
+                if (payload.data.user.must_change_password) {
+                    window.location.replace(`${projectBase}frontend/change-password.php`);
+                    return;
+                }
                 const destination = dashboardForRole(payload.data.user.role.name);
                 window.location.replace(`${projectBase}${destination}`);
             } catch (error) {
@@ -270,6 +278,64 @@
         return 'frontend/dashboard.php';
     }
 
+    async function initPasswordChange() {
+        const form = document.getElementById('password-change-form');
+        const message = document.getElementById('password-change-message');
+        const submit = document.getElementById('password-change-submit');
+        submit.dataset.originalLabel = 'Change password';
+        try {
+            const user = await currentSession();
+            if (!user) {
+                window.location.replace(`${projectBase}auth/login.php?message=session-expired`);
+                return;
+            }
+            if (!user.must_change_password) {
+                window.location.replace(`${projectBase}${dashboardForRole(user.role.name)}`);
+                return;
+            }
+        } catch (error) {
+            showMessage(message, error.message);
+            return;
+        }
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            hideMessage(message);
+            if (!form.reportValidity()) return;
+            const values = new FormData(form);
+            if (values.get('password') !== values.get('confirm_password')) {
+                showMessage(message, 'The passwords do not match.');
+                document.getElementById('confirm-new-password').focus();
+                return;
+            }
+            setBusy(submit, true, 'Changing password…');
+            try {
+                const { response, payload } = await request('/api/auth/change-password', {
+                    method: 'POST',
+                    body: JSON.stringify({ password: values.get('password') }),
+                });
+                if (!response.ok || !payload.success) {
+                    throw new Error(errorMessage(payload, 'Could not change your password.'));
+                }
+                showMessage(message, 'Password changed. Redirecting…', 'success');
+                window.setTimeout(async () => {
+                    try {
+                        const user = await currentSession();
+                        if (user) {
+                            window.location.replace(`${projectBase}${dashboardForRole(user.role.name)}`);
+                        }
+                    } catch (error) {
+                        showMessage(message, error.message);
+                        setBusy(submit, false);
+                    }
+                }, 500);
+            } catch (error) {
+                showMessage(message, error.message);
+                setBusy(submit, false);
+            }
+        });
+    }
+
     async function initDashboard() {
         const message = document.getElementById('dashboard-message');
         try {
@@ -280,6 +346,10 @@
             }
 
             document.getElementById('welcome-name').textContent = user.display_name;
+            if (user.must_change_password) {
+                window.location.replace(`${projectBase}frontend/change-password.php`);
+                return;
+            }
             document.getElementById('header-user-name').textContent = user.display_name;
             document.getElementById('header-user-role').textContent = user.role.name.replaceAll('_', ' ');
             document.getElementById('user-avatar').textContent = initials(user.display_name);
@@ -332,6 +402,7 @@
         setupPasswordToggles();
         const page = document.body.dataset.page;
         if (page === 'login') initLogin();
+        if (page === 'password-change') initPasswordChange();
         if (page === 'signup') initSignup();
         if (page === 'dashboard') initDashboard();
     });

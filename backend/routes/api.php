@@ -8,6 +8,7 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/health' => ['GET'],
         '/api/auth/csrf' => ['GET'],
         '/api/auth/login' => ['POST'],
+        '/api/auth/change-password' => ['POST'],
         '/api/auth/logout' => ['POST'],
         '/api/auth/me' => ['GET'],
         '/api/auth/register' => ['POST'],
@@ -113,6 +114,11 @@ function dispatchApiRequest(string $method, string $path): void
     if (preg_match('#^/api/admin/users/([0-9]+)/status$#', $path, $matches)) {
         $statusUserId = $matches[1];
         $routes[$path] = ['PATCH'];
+    }
+    $passwordResetUserId = null;
+    if (preg_match('#^/api/admin/users/([0-9]+)/password-reset$#', $path, $matches)) {
+        $passwordResetUserId = $matches[1];
+        $routes[$path] = ['POST'];
     }
     if (preg_match('#^/api/admin/fees/([0-9]+)$#', $path, $matches)) {
         $adminFeeId = $matches[1];
@@ -359,6 +365,35 @@ function dispatchApiRequest(string $method, string $path): void
         ]);
     }
 
+    $allowedDuringPasswordChange = [
+        '/api/health',
+        '/api/auth/csrf',
+        '/api/auth/login',
+        '/api/auth/logout',
+        '/api/auth/me',
+        '/api/auth/change-password',
+    ];
+    $sessionUserId = $_SESSION['user_id'] ?? null;
+    if (!in_array($path, $allowedDuringPasswordChange, true)
+        && (is_int($sessionUserId)
+            || (is_string($sessionUserId) && ctype_digit($sessionUserId)))) {
+        try {
+            $passwordStatus = getDatabaseConnection()->prepare(
+                'SELECT must_change_password
+                 FROM users
+                 WHERE user_id = :user_id AND is_active = 1
+                 LIMIT 1'
+            );
+            $passwordStatus->execute(['user_id' => (int) $sessionUserId]);
+            if ((int) $passwordStatus->fetchColumn() === 1) {
+                jsonError('Change your temporary password before continuing.', [], 403);
+            }
+        } catch (PDOException $exception) {
+            error_log('Required password-change check failed: ' . $exception->getMessage());
+            jsonError('The service is temporarily unavailable.', [], 503);
+        }
+    }
+
     if ($path === '/api/health') {
         try {
             $database = getDatabaseConnection();
@@ -388,6 +423,7 @@ function dispatchApiRequest(string $method, string $path): void
     $handlers = [
         '/api/auth/csrf' => 'handleAuthCsrf',
         '/api/auth/login' => 'handleAuthLogin',
+        '/api/auth/change-password' => 'handleAuthChangePassword',
         '/api/auth/logout' => 'handleAuthLogout',
         '/api/auth/me' => 'handleAuthMe',
         '/api/auth/register' => 'handleAuthRegister',
@@ -437,6 +473,9 @@ function dispatchApiRequest(string $method, string $path): void
     try {
         if ($statusUserId !== null) {
             handleAdminUserStatus($statusUserId);
+        }
+        if ($passwordResetUserId !== null) {
+            handleAdminUserPasswordReset($passwordResetUserId);
         }
         if ($adminFeeId !== null) {
             handleAdminFeeUpdate($adminFeeId);

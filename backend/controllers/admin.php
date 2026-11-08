@@ -63,6 +63,7 @@ function handleAdminRolesGet(): void
     $statement = $database->query(
         'SELECT role_id, role_name, description
          FROM roles
+         WHERE role_name <> \'system_administrator\'
          ORDER BY role_name'
     );
     $roles = array_map(static function (array $role): array {
@@ -297,7 +298,7 @@ function handleAdminFeeUpdate(string $feeId): void
 function handleAdminUserCreate(): void
 {
     $database = getDatabaseConnection();
-    requireAdministrator($database);
+    $admin = requireAdministrator($database);
     requireCsrfRequest();
 
     $input = readJsonRequest();
@@ -340,10 +341,17 @@ function handleAdminUserCreate(): void
                 'role_id' => 'Select an available role.',
             ], 422);
         }
+        if ($role['role_name'] === 'system_administrator') {
+            jsonError('Administrator accounts cannot be created here.', [
+                'role_id' => 'Choose a staff role.',
+            ], 403);
+        }
 
+        $database->beginTransaction();
         $insertStatement = $database->prepare(
-            'INSERT INTO users (role_id, username, password_hash, display_name)
-             VALUES (:role_id, :username, :password_hash, :display_name)'
+            'INSERT INTO users
+                (role_id, username, password_hash, display_name, must_change_password)
+             VALUES (:role_id, :username, :password_hash, :display_name, 1)'
         );
         $insertStatement->execute([
             'role_id' => (int) $role['role_id'],
@@ -351,10 +359,20 @@ function handleAdminUserCreate(): void
             'password_hash' => password_hash($password, PASSWORD_DEFAULT),
             'display_name' => trim($displayName),
         ]);
+        $newUserId = (int) $database->lastInsertId();
+        $audit = $database->prepare(
+            'INSERT INTO audit_log (user_id, action)
+             VALUES (:user_id, :action)'
+        );
+        $audit->execute([
+            'user_id' => (int) $admin['user_id'],
+            'action' => 'admin.staff.created:' . $newUserId,
+        ]);
+        $database->commit();
 
         jsonSuccess('Staff account created.', [
             'user' => [
-                'user_id' => (int) $database->lastInsertId(),
+                'user_id' => $newUserId,
                 'display_name' => trim($displayName),
                 'username' => $username,
                 'role' => [
@@ -365,6 +383,9 @@ function handleAdminUserCreate(): void
             ],
         ], 201);
     } catch (PDOException $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
         if ($exception->getCode() === '23000') {
             jsonError('That username is already in use.', [
                 'username' => 'Choose a different username.',
@@ -439,6 +460,17 @@ function handleAdminUserStatus(string $userId): void
             'is_active' => $isActive ? 1 : 0,
             'user_id' => $targetUserId,
         ]);
+        if ((int) $target['is_active'] !== ($isActive ? 1 : 0)) {
+            $audit = $database->prepare(
+                'INSERT INTO audit_log (user_id, action)
+                 VALUES (:user_id, :action)'
+            );
+            $audit->execute([
+                'user_id' => (int) $currentAdmin['user_id'],
+                'action' => ($isActive ? 'admin.staff.activated:' : 'admin.staff.deactivated:')
+                    . $targetUserId,
+            ]);
+        }
         $database->commit();
 
         jsonSuccess('Staff account status updated.', [
@@ -452,4 +484,60 @@ function handleAdminUserStatus(string $userId): void
         error_log('Admin staff status update failed: ' . $exception->getMessage());
         jsonError('Unable to update account status right now.', [], 500);
     }
+}
+
+function handleAdminUserPasswordReset(string $userId): void
+{
+    if (!ctype_digit($userId) || (int) $userId < 1) {
+        jsonError('A valid user ID is required.', [], 400);
+    }
+    $database = getDatabaseConnection();
+    $admin = requireAdministrator($database);
+    requireCsrfRequest();
+    $targetUserId = (int) $userId;
+    if ($targetUserId === (int) $admin['user_id']) {
+        jsonError('Use the password-change page to update your own password.', [], 409);
+    }
+
+    $temporaryPassword = bin2hex(random_bytes(16));
+    try {
+        $database->beginTransaction();
+        $target = $database->prepare(
+            'SELECT user_id FROM users WHERE user_id = :user_id LIMIT 1 FOR UPDATE'
+        );
+        $target->execute(['user_id' => $targetUserId]);
+        if ($target->fetch() === false) {
+            $database->rollBack();
+            jsonError('Staff account not found.', [], 404);
+        }
+
+        $update = $database->prepare(
+            'UPDATE users
+             SET password_hash = :password_hash, must_change_password = 1
+             WHERE user_id = :user_id'
+        );
+        $update->execute([
+            'password_hash' => password_hash($temporaryPassword, PASSWORD_DEFAULT),
+            'user_id' => $targetUserId,
+        ]);
+        $audit = $database->prepare(
+            'INSERT INTO audit_log (user_id, action)
+             VALUES (:user_id, :action)'
+        );
+        $audit->execute([
+            'user_id' => (int) $admin['user_id'],
+            'action' => 'admin.staff.password_reset:' . $targetUserId,
+        ]);
+        $database->commit();
+    } catch (PDOException $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        error_log('Admin staff password reset failed: ' . $exception->getMessage());
+        jsonError('Unable to reset the staff password right now.', [], 500);
+    }
+
+    jsonSuccess('Temporary password generated. Share it with the staff member securely.', [
+        'temporary_password' => $temporaryPassword,
+    ]);
 }

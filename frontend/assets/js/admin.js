@@ -5,6 +5,7 @@
     const apiEntry = new URL(`${projectBase}backend/index.php`, window.location.origin);
     let csrfToken = '';
     let searchTimer = null;
+    let currentAdminUserId = null;
 
     async function request(route, options = {}) {
         const headers = new Headers(options.headers || {});
@@ -72,6 +73,7 @@
             throw new Error(messageText(payload, 'Could not verify administrator access.'));
         }
         csrfToken = payload.data.csrf_token;
+        currentAdminUserId = Number(payload.data.user.user_id);
         if (payload.data.user.role.name !== 'system_administrator') {
             window.location.replace(`${projectBase}frontend/dashboard.php`);
             return false;
@@ -331,6 +333,14 @@
                 toggle.setAttribute('aria-label', `${toggle.textContent} ${user.display_name}`);
                 toggle.addEventListener('click', () => updateUserStatus(user, toggle));
                 actions.appendChild(toggle);
+                const reset = document.createElement('button');
+                reset.type = 'button';
+                reset.className = 'status-toggle';
+                reset.textContent = 'Reset password';
+                reset.disabled = Number(user.user_id) === currentAdminUserId;
+                reset.setAttribute('aria-label', `Reset password for ${user.display_name}`);
+                reset.addEventListener('click', () => resetUserPassword(user, reset));
+                actions.appendChild(reset);
                 rows.appendChild(row);
             });
         } catch (error) {
@@ -374,13 +384,18 @@
 
     async function updateUserStatus(user, button) {
         hideMessage();
+        const nextActive = !user.is_active;
+        const action = nextActive ? 'activate' : 'deactivate';
+        if (!window.confirm(`Are you sure you want to ${action} ${user.display_name}'s account?`)) {
+            return;
+        }
         button.disabled = true;
         try {
             const { response, payload } = await request(
                 `/api/admin/users/${user.user_id}/status`,
                 {
                     method: 'PATCH',
-                    body: JSON.stringify({ is_active: !user.is_active }),
+                    body: JSON.stringify({ is_active: nextActive }),
                 }
             );
             if (response.status === 401) {
@@ -392,6 +407,34 @@
             }
             showMessage(payload.message, 'success');
             await loadUsers(document.querySelector('[data-user-search]')?.value.trim() || '');
+        } catch (error) {
+            showMessage(error.message);
+            button.disabled = false;
+        }
+    }
+
+    async function resetUserPassword(user, button) {
+        hideMessage();
+        if (!window.confirm(`Generate a temporary password for ${user.display_name}?`)) {
+            return;
+        }
+        button.disabled = true;
+        try {
+            const { response, payload } = await request(
+                `/api/admin/users/${user.user_id}/password-reset`,
+                { method: 'POST' }
+            );
+            if (response.status === 401) {
+                window.location.replace(`${projectBase}auth/login.php?message=session-expired`);
+                return;
+            }
+            if (!response.ok || !payload.success) {
+                throw new Error(messageText(payload, 'Could not reset the password.'));
+            }
+            showMessage(
+                `${payload.message} Temporary password: ${payload.data.temporary_password}`,
+                'success'
+            );
         } catch (error) {
             showMessage(error.message);
             button.disabled = false;
@@ -437,7 +480,7 @@
                     throw new Error(messageText(payload, 'Could not create the account.'));
                 }
                 form.reset();
-                showMessage('Staff account created successfully.', 'success');
+                showMessage('Staff account created. The staff member must change the temporary password at first sign-in.', 'success');
                 await loadUsers(document.querySelector('[data-user-search]')?.value.trim() || '');
             } catch (error) {
                 showMessage(error.message);

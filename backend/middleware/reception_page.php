@@ -32,6 +32,7 @@ function requireReceptionPage(): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
 
     if (!in_array($user['role_name'], ['receptionist', 'system_administrator'], true)) {
         http_response_code(403);

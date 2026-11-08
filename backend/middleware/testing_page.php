@@ -53,6 +53,7 @@ function requireTestingPage(string $scope): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
     if (!in_array($user['role_name'], $departments[$scope]['roles'], true)) {
         http_response_code(403);
         exit('Access to this testing department is not authorized.');

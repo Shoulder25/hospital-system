@@ -82,7 +82,7 @@ $escape = static function ($value): string {
                     <div class="admin-panel-heading">
                         <div>
                             <h2 id="create-staff-heading">Create staff account</h2>
-                            <p>Passwords must be at least 12 characters. Administrator accounts are not created here.</p>
+                            <p>Set a temporary password of at least 12 characters. Staff must change it when they first sign in. Administrator accounts are not created here.</p>
                         </div>
                     </div>
                     <form class="staff-form" data-create-user-form>
@@ -114,7 +114,7 @@ $escape = static function ($value): string {
                     <div class="admin-panel-heading users-panel-heading">
                         <div>
                             <h2 id="directory-heading">Staff directory</h2>
-                            <p>Search by name, username or role; activate or deactivate accounts.</p>
+                            <p>Search by name, username or role; manage access and reset passwords.</p>
                         </div>
                         <label class="search-field">
                             <span class="visually-hidden">Search staff</span>

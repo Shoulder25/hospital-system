@@ -31,6 +31,7 @@ function requireEmergencyNursePage(): array
         header('Location: ' . $basePath . '/auth/login.php?message=session-expired');
         exit;
     }
+    redirectIfPasswordChangeRequired($user);
     if (!in_array($user['role_name'], ['emergency_nurse', 'system_administrator'], true)) {
         http_response_code(403);
         exit('Emergency nurse or administrator access is required.');

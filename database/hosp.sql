@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS users (
     display_name VARCHAR(150) NOT NULL,
     specialist_type ENUM('resident', 'locum') NULL,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    must_change_password TINYINT(1) NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),
     UNIQUE KEY uq_users_username (username),
