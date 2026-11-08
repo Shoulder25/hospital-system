@@ -63,7 +63,22 @@ function testingOrderRows(
     $departments = testingDepartments();
     $departmentFilter = '';
     $parameters = [];
-    if ($scope !== 'testing_desk') {
+    if ($scope === 'testing_desk') {
+        $validDepartmentConditions = [];
+        foreach ($departments as $department => $configuration) {
+            $placeholders = [];
+            foreach ($configuration['tests'] as $index => $testType) {
+                $placeholder = 'desk_test_' . $department . '_' . $index;
+                $placeholders[] = ':' . $placeholder;
+                $parameters[$placeholder] = $testType;
+            }
+            $validDepartmentConditions[] = '(t.department = \''
+                . $department . '\' AND t.test_type IN ('
+                . implode(', ', $placeholders) . '))';
+        }
+        $departmentFilter = ' AND ('
+            . implode(' OR ', $validDepartmentConditions) . ')';
+    } else {
         if (!isset($departments[$scope])) {
             jsonError('Unknown testing department.', [], 404);
         }
@@ -82,14 +97,18 @@ function testingOrderRows(
 
     $statusFilter = ' AND t.status <> \'cancelled\'';
     if ($status !== '') {
-        $allowedStatuses = ['ordered', 'in_progress', 'completed', 'cancelled'];
+        $allowedStatuses = ['all', 'ordered', 'in_progress', 'completed', 'cancelled'];
         if (!in_array($status, $allowedStatuses, true)) {
             jsonError('Select a valid order status.', [
-                'status' => 'Choose ordered, in progress, completed, or cancelled.',
+                'status' => 'Choose all, ordered, in progress, completed, or cancelled.',
             ], 422);
         }
-        $statusFilter = ' AND t.status = :status';
-        $parameters['status'] = $status;
+        if ($status !== 'all') {
+            $statusFilter = ' AND t.status = :status';
+            $parameters['status'] = $status;
+        } else {
+            $statusFilter = '';
+        }
     }
 
     $searchFilter = '';
@@ -118,6 +137,8 @@ function testingOrderRows(
                 t.status AS order_status, t.ordered_at,
                 t.retest_of_order_id, t.testing_desk_routed_at,
                 routed.display_name AS routed_by,
+                ordering_user.display_name AS ordered_by,
+                ordering_role.role_name AS ordered_by_role,
                 p.patient_id, p.patient_number, p.first_name, p.last_name,
                 v.arrived_at, v.is_emergency,
                 tr.test_result_id, tr.result_text, tr.result_notes,
@@ -128,6 +149,10 @@ function testingOrderRows(
          INNER JOIN patients p ON p.patient_id = v.patient_id
          LEFT JOIN users routed
             ON routed.user_id = t.testing_desk_routed_by_user_id
+         INNER JOIN users ordering_user
+            ON ordering_user.user_id = t.ordered_by_user_id
+         INNER JOIN roles ordering_role
+            ON ordering_role.role_id = ordering_user.role_id
          LEFT JOIN test_results tr ON tr.test_order_id = t.test_order_id
          LEFT JOIN users recorder ON recorder.user_id = tr.recorded_by_user_id
          WHERE 1 = 1'
@@ -166,6 +191,8 @@ function testingOrderRows(
                 'retest_of_order_id' => $row['retest_of_order_id'] === null
                     ? null
                     : (int) $row['retest_of_order_id'],
+                'ordered_by' => $row['ordered_by'],
+                'ordered_by_role' => $row['ordered_by_role'],
                 'desk_routed_at' => $row['testing_desk_routed_at'],
                 'routed_by' => $row['routed_by'],
                 'results' => [],
@@ -207,9 +234,39 @@ function handleTestingOrdersGet(string $scope, string $search, string $status): 
     }
 
     $orders = testingOrderRows($database, $scope, $search, $status);
+    $validTypeByDepartment = [];
+    foreach (testingDepartments() as $department => $configuration) {
+        $validTypeByDepartment[$department] = $configuration['tests'];
+    }
+    $countsStatement = $database->query(
+        'SELECT department, test_type, status, testing_desk_routed_at,
+                COUNT(*) AS order_count
+         FROM test_orders
+         WHERE status <> \'cancelled\'
+         GROUP BY department, test_type, status, testing_desk_routed_at'
+    );
+    $counts = ['ordered' => 0, 'in_progress' => 0, 'completed' => 0];
+    foreach ($countsStatement->fetchAll() as $countRow) {
+        $department = $countRow['department'];
+        if ($scope !== 'testing_desk'
+            && $department !== $scope) {
+            continue;
+        }
+        if ($scope === 'testing_desk'
+            && $countRow['status'] === 'ordered'
+            && $countRow['testing_desk_routed_at'] !== null) {
+            continue;
+        }
+        if (!isset($validTypeByDepartment[$department])
+            || !in_array($countRow['test_type'], $validTypeByDepartment[$department], true)
+            || !in_array($countRow['status'], array_keys($counts), true)) {
+            continue;
+        }
+        $counts[$countRow['status']] += (int) $countRow['order_count'];
+    }
     jsonSuccess(
         $scope === 'testing_desk' ? 'Testing centre orders loaded.' : 'Department orders loaded.',
-        ['orders' => $orders]
+        ['orders' => $orders, 'counts' => $counts]
     );
 }
 
@@ -246,6 +303,16 @@ function handleTestingDeskRoute(string $orderId): void
     try {
         $database->beginTransaction();
         $order = testingOrderForUpdate($database, (int) $orderId);
+        $departments = testingDepartments();
+        if (!isset($departments[$order['department']])
+            || !in_array(
+                $order['test_type'],
+                $departments[$order['department']]['tests'],
+                true
+            )) {
+            $database->rollBack();
+            jsonError('This test order has an invalid department assignment.', [], 409);
+        }
         if ($order['status'] !== 'ordered') {
             $database->rollBack();
             jsonError('Only new test orders can be routed by the testing desk.', [], 409);

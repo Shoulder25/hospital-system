@@ -8,7 +8,19 @@
     const queueBody = document.querySelector('[data-order-rows]');
     const detailPanel = document.querySelector('[data-order-detail]');
     const resultForm = document.querySelector('[data-result-form]');
-    const state = { csrfToken: '', search: '', status: '', department: '', activeOrder: null, orders: [], timer: null };
+    const page = document.body.dataset.testingPage || '';
+    const requestedOrderId = new URLSearchParams(window.location.search).get('order_id');
+    const state = {
+        csrfToken: '',
+        search: requestedOrderId || '',
+        status: document.body.dataset.defaultStatus || '',
+        department: '',
+        activeOrder: null,
+        orders: [],
+        counts: null,
+        requestedOrderHandled: false,
+        timer: null,
+    };
     const allowedRoles = {
         testing_desk: ['testing_desk_clerk', 'system_administrator'],
         laboratory: ['laboratory_technician', 'system_administrator'],
@@ -139,16 +151,20 @@
         const tr = document.createElement('tr');
         const td = document.createElement('td');
         td.className = 'table-message';
-        td.colSpan = scope === 'testing_desk' ? 9 : 7;
+        td.colSpan = scope === 'testing_desk' ? 10 : 7;
         td.textContent = message;
         tr.appendChild(td);
         queueBody.appendChild(tr);
     }
 
     function updateCounts(orders) {
+        const values = state.counts || ['ordered', 'in_progress', 'completed'].reduce((counts, status) => {
+            counts[status] = orders.filter((order) => order.status === status).length;
+            return counts;
+        }, {});
         ['ordered', 'in_progress', 'completed'].forEach((status) => {
-            const count = orders.filter((order) => order.status === status).length;
-            document.querySelector(`[data-count="${status}"]`).textContent = String(count);
+            const target = document.querySelector(`[data-count="${status}"]`);
+            if (target) target.textContent = String(values[status] || 0);
         });
     }
 
@@ -164,12 +180,18 @@
     function orderAction(order) {
         const action = document.createElement('td');
         if (scope === 'testing_desk') {
-            if (order.status === 'ordered' && !order.desk_routed_at) {
-                action.appendChild(makeButton('Route patient', () => routeOrder(order)));
+            if (page === 'queue' || page === 'route') {
+                action.appendChild(orderLink(order, 'Review & route', 'route-order.php'));
+            } else if (page === 'dashboard' && order.status === 'ordered' && !order.desk_routed_at) {
+                action.appendChild(orderLink(order, 'Review & route', 'route-order.php'));
             } else if (order.desk_routed_at) {
-                action.textContent = `Routed ${formatDateTime(order.desk_routed_at)}`;
+                action.appendChild(orderLink(
+                    order,
+                    page === 'dashboard' ? 'View status' : `Routed ${formatDateTime(order.desk_routed_at)}`,
+                    'order-details.php'
+                ));
             } else {
-                action.textContent = '—';
+                action.appendChild(orderLink(order, 'View details', 'order-details.php'));
             }
             return action;
         }
@@ -190,10 +212,21 @@
         return action;
     }
 
+    function orderLink(order, label, pageName) {
+        const link = document.createElement('a');
+        link.className = 'button button-outline button-small';
+        link.href = `${pageName}?order_id=${encodeURIComponent(order.test_order_id)}`;
+        link.textContent = label;
+        return link;
+    }
+
     function renderOrders() {
-        const selected = scope === 'testing_desk' && state.department
+        let selected = scope === 'testing_desk' && state.department
             ? state.orders.filter((order) => order.department === state.department)
             : state.orders;
+        if (scope === 'testing_desk' && page === 'queue') {
+            selected = selected.filter((order) => order.status === 'ordered' && !order.desk_routed_at);
+        }
         updateCounts(selected);
         queueBody.replaceChildren();
         if (selected.length === 0) {
@@ -216,6 +249,7 @@
             cell(row, pretty(order.test_type));
             if (scope === 'testing_desk') {
                 cell(row, pretty(order.department));
+                cell(row, `${order.ordered_by || 'Staff'} · ${pretty(order.ordered_by_role)}`);
             }
             cell(row, formatDateTime(order.ordered_at));
             const statusCell = cell(row, '');
@@ -249,6 +283,7 @@
                 'Could not load test orders.'
             );
             state.orders = data.orders;
+            state.counts = data.counts || null;
             renderOrders();
             if (state.activeOrder) {
                 const refreshed = state.orders.find(
@@ -256,15 +291,31 @@
                 );
                 if (refreshed) renderOrderDetails(refreshed);
             }
+            if (!state.requestedOrderHandled
+                && requestedOrderId
+                && /^[1-9][0-9]*$/.test(requestedOrderId)) {
+                const requested = state.orders.find(
+                    (order) => order.test_order_id === Number(requestedOrderId)
+                );
+                if (requested) {
+                    openOrder(requested);
+                } else if (page === 'route') {
+                    showMessage('This order is not awaiting routing or is not available in the Testing Desk queue.');
+                } else if (page === 'details') {
+                    showMessage('Test order not found. Check the order ID or search again.');
+                }
+                state.requestedOrderHandled = true;
+            }
         } catch (error) {
             emptyRow(error.message);
         }
     }
 
-    async function routeOrder(order) {
+    async function routeOrder(order, button = null) {
         if (!window.confirm(`Route patient ${order.patient_name} to ${pretty(order.department)} for ${pretty(order.test_type)}?`)) {
             return;
         }
+        if (button) button.disabled = true;
         hideMessage();
         try {
             await parseRequest(
@@ -276,6 +327,8 @@
             await loadOrders();
         } catch (error) {
             showMessage(error.message);
+        } finally {
+            if (button) button.disabled = false;
         }
     }
 
@@ -323,14 +376,40 @@
             ['Emergency', order.is_emergency ? 'Yes' : 'No'],
             ['Test', pretty(order.test_type)],
             ['Department', pretty(order.department)],
+            ['Requested by', `${order.ordered_by || 'Staff'} · ${pretty(order.ordered_by_role)}`],
             ['Status', pretty(order.status)],
             ['Ordered', formatDateTime(order.ordered_at)],
             ['Desk routing', order.desk_routed_at ? `${formatDateTime(order.desk_routed_at)}${order.routed_by ? ` by ${order.routed_by}` : ''}` : 'Not routed yet'],
             ['Retest of order', order.retest_of_order_id ? `#${order.retest_of_order_id}` : 'No'],
         ]);
+        const deskActions = document.querySelector('[data-desk-actions]');
+        if (deskActions) {
+            deskActions.replaceChildren();
+            if (scope === 'testing_desk' && page === 'route') {
+                if (order.status === 'ordered' && !order.desk_routed_at) {
+                    deskActions.appendChild(makeButton(
+                        `Route patient to ${pretty(order.department)}`,
+                        (event) => routeOrder(order, event.currentTarget),
+                        'button button-primary'
+                    ));
+                } else if (order.desk_routed_at) {
+                    const note = document.createElement('p');
+                    note.className = 'testing-empty';
+                    note.textContent = `Already routed to ${pretty(order.department)}${order.routed_by ? ` by ${order.routed_by}` : ''}.`;
+                    deskActions.appendChild(note);
+                } else {
+                    const note = document.createElement('p');
+                    note.className = 'testing-empty';
+                    note.textContent = 'This order is not eligible for routing.';
+                    deskActions.appendChild(note);
+                }
+            }
+        }
         renderResultHistory(order.results);
-        resultForm.reset();
-        resultForm.hidden = scope === 'testing_desk' || order.status !== 'in_progress';
+        if (resultForm) {
+            resultForm.reset();
+            resultForm.hidden = scope === 'testing_desk' || order.status !== 'in_progress';
+        }
         detailPanel.hidden = false;
         detailPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -409,18 +488,26 @@
     }
 
     function setupFilters() {
-        document.querySelector('[data-order-search]').addEventListener('input', (event) => {
+        const search = document.querySelector('[data-order-search]');
+        const status = document.querySelector('[data-status-filter]');
+        const departmentFilter = document.querySelector('[data-department-filter]');
+        if (search) {
+            search.value = state.search;
+            search.addEventListener('input', (event) => {
             window.clearTimeout(state.timer);
             state.timer = window.setTimeout(() => {
                 state.search = event.target.value.trim();
                 loadOrders();
             }, 250);
-        });
-        document.querySelector('[data-status-filter]').addEventListener('change', (event) => {
-            state.status = event.target.value;
-            loadOrders();
-        });
-        const departmentFilter = document.querySelector('[data-department-filter]');
+            });
+        }
+        if (status) {
+            status.value = state.status || 'all';
+            status.addEventListener('change', (event) => {
+                state.status = event.target.value;
+                loadOrders();
+            });
+        }
         if (departmentFilter) {
             departmentFilter.addEventListener('change', (event) => {
                 state.department = event.target.value;
@@ -462,6 +549,7 @@
                 state.activeOrder = null;
             });
             await loadOrders();
+            window.setInterval(() => loadOrders(), 20000);
         } catch (error) {
             showMessage(error.message);
         }

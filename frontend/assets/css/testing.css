@@ -28,7 +28,8 @@
     gap: 15px;
 }
 
-.testing-stats article {
+.testing-stats article,
+.testing-stats a {
     display: grid;
     gap: 8px;
     border: 1px solid #e1eaed;
@@ -36,16 +37,73 @@
     padding: 18px;
     background: #fff;
     box-shadow: 0 4px 16px rgba(27, 63, 76, .04);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
 }
 
-.testing-stats article span {
+.testing-stats a:hover,
+.testing-stats a:focus-visible {
+    border-color: #b9d8d3;
+    box-shadow: 0 8px 20px rgba(27, 63, 76, .08);
+    transform: translateY(-1px);
+}
+
+.testing-stats a:focus-visible,
+.testing-quick-links a:focus-visible {
+    outline: 3px solid rgba(32, 139, 128, .22);
+    outline-offset: 2px;
+}
+
+.testing-stats article span,
+.testing-stats a span {
     color: #647a83;
     font-size: .88rem;
 }
 
-.testing-stats article strong {
+.testing-stats article strong,
+.testing-stats a strong {
     color: #173c48;
     font-size: 1.65rem;
+}
+
+.testing-quick-links {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.testing-quick-links a {
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    min-height: 105px;
+    border: 1px solid #e1eaed;
+    border-radius: 12px;
+    padding: 15px;
+    background: #fff;
+    color: #23434e;
+    text-decoration: none;
+    transition: border-color .18s ease, background .18s ease;
+}
+
+.testing-quick-links a:hover {
+    border-color: #b9d8d3;
+    background: #f7fbfa;
+}
+
+.testing-quick-links strong {
+    color: #176f68;
+}
+
+.testing-quick-links span {
+    color: #647a83;
+    font-size: .86rem;
+    line-height: 1.45;
+}
+
+.testing-desk-actions {
+    justify-content: flex-start;
 }
 
 .testing-panel,
@@ -306,10 +364,18 @@
         min-width: 190px;
         flex: 1;
     }
+
+    .testing-quick-links {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 600px) {
     .testing-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .testing-quick-links {
         grid-template-columns: 1fr;
     }
 

@@ -27,7 +27,14 @@ MySQL username/password as described in
 
 Sign in before visiting a department page:
 
-- Testing desk: `http://localhost/hospital-system/frontend/testing-desk/index.php`
+- Testing Desk Clerk pages:
+  - Dashboard: `http://localhost/hospital-system/frontend/testing-desk/index.php`
+  - Orders awaiting routing: `http://localhost/hospital-system/frontend/testing-desk/queue.php`
+  - Route an order: `http://localhost/hospital-system/frontend/testing-desk/route-order.php`
+  - In progress: `http://localhost/hospital-system/frontend/testing-desk/in-progress.php`
+  - Completed: `http://localhost/hospital-system/frontend/testing-desk/completed.php`
+  - Order details: `http://localhost/hospital-system/frontend/testing-desk/order-details.php?order_id={id}`
+  - History: `http://localhost/hospital-system/frontend/testing-desk/history.php`
 - Laboratory: `http://localhost/hospital-system/frontend/laboratory/index.php`
 - Radiology: `http://localhost/hospital-system/frontend/radiology/index.php`
 - Cardiac: `http://localhost/hospital-system/frontend/cardiac/index.php`
@@ -41,8 +48,14 @@ requests receive HTTP 401. State-changing requests require the existing
 `X-CSRF-Token` header. The responsible user is taken from the session and
 important actions are recorded in `audit_log`.
 
-The testing desk only routes orders created by nursing or the doctor. A
-technician can start a routed order and save one final result. Saving the result,
+The Testing Desk Clerk views and routes existing valid orders, but does not
+change requests, perform investigations, diagnose, or record clinical results.
+The requested test determines the department: blood, glucose, urine, pregnancy
+and pap smear go to Laboratory; X-ray to Radiology; ECG to Cardiac. The shared
+CareBridge sidebar provides separate dashboard, routing queue, route-order,
+in-progress, completed, details, and history pages.
+
+A technician can start a routed order and save one final result. Saving the result,
 completing the order, adding its linked test bill item, refreshing the bill
 total, and recording the audit entry happen in one transaction. The charge is
 read from the active `fee_catalog` entry for the test type: `TEST_BLOOD_DEMO`,
@@ -72,7 +85,7 @@ and JSON request/response format.
 | POST | `/api/cardiac/results` | Cardiac technician, administrator + CSRF | Record ECG findings |
 
 `search` matches patient number/name, visit ID, or order ID. `status` may be
-`ordered`, `in_progress`, `completed`, or `cancelled`.
+`all`, `ordered`, `in_progress`, `completed`, or `cancelled`.
 
 To record a result, send:
 
