@@ -82,7 +82,7 @@ $healthUrl = $projectPath . '/backend/index.php?route=%2Fapi%2Fhealth';
                 </article>
                 <article class="detail">
                     <h2>Current stage</h2>
-                    <p>Database, backend foundation and initial authentication pages are available; department modules are pending.</p>
+                    <p>Department modules are available for the academic demo; complete end-to-end testing is still pending.</p>
                 </article>
             </div>
         </section>

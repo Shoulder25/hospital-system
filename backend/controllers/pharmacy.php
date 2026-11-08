@@ -67,22 +67,35 @@ function pharmacyEnsurePrescriptionCharges(PDO $database, array $visit, array $b
          FOR UPDATE'
     );
     $prescriptions->execute(['visit_id' => (int) $visit['visit_id']]);
+    $prescriptionIds = array_map(
+        static fn (array $prescription): int => (int) $prescription['prescription_id'],
+        $prescriptions->fetchAll()
+    );
+    if ($prescriptionIds === []) {
+        return;
+    }
+
+    $parameters = [];
+    $placeholders = [];
+    foreach ($prescriptionIds as $index => $prescriptionId) {
+        $name = 'prescription_id_' . $index;
+        $placeholders[] = ':' . $name;
+        $parameters[$name] = $prescriptionId;
+    }
     $items = $database->prepare(
         'SELECT prescription_item_id
          FROM prescription_items
-         WHERE prescription_id = :prescription_id
-         ORDER BY prescription_item_id
+         WHERE prescription_id IN (' . implode(', ', $placeholders) . ')
+         ORDER BY prescription_id, prescription_item_id
          FOR UPDATE'
     );
-    foreach ($prescriptions->fetchAll() as $prescription) {
-        $items->execute(['prescription_id' => (int) $prescription['prescription_id']]);
-        foreach ($items->fetchAll() as $item) {
-            billingAddMedicationItemOnce(
-                $database,
-                (int) $bill['bill_id'],
-                (int) $item['prescription_item_id']
-            );
-        }
+    $items->execute($parameters);
+    foreach ($items->fetchAll() as $item) {
+        billingAddMedicationItemOnce(
+            $database,
+            (int) $bill['bill_id'],
+            (int) $item['prescription_item_id']
+        );
     }
 }
 

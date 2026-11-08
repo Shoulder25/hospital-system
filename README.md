@@ -1,50 +1,45 @@
 # Hospital Integrated Patient Processing System
 
-Academic prototype for the CSC411 mini-project (functional-first, light security).
+CareBridge is an academic CSC411 prototype for coordinating a hospital visit across reception, nursing, doctors, testing departments, specialists, therapy, billing and pharmacy. Use fictional demonstration data only. This project is not for clinical or production use.
 
-## Start here
-1. Open this folder in VS Code.
-2. Read `AGENTS.md` before asking the coding agent to implement anything.
-3. Put the project in your XAMPP web root (for example, `C:\xampp\htdocs\<your-project>`).
-4. Start Apache and MySQL in XAMPP.
-5. Follow the setup and demo instructions in [`docs/DEMO.md`](./docs/DEMO.md).
+## Run locally with XAMPP
 
-Source documents are in `docs/source/`.
+1. Put the project in `C:\xampp\htdocs\hospital-system`.
+2. Start Apache and MySQL from the XAMPP Control Panel.
+3. Import `database\hosp.sql` into MySQL. For an existing database, apply the required SQL files in `database\migrations\` once.
+4. Configure the database for Apache using `HOSPITAL_DB_NAME`, `HOSPITAL_DB_USER`, `HOSPITAL_DB_PASSWORD`, and optionally `HOSPITAL_DB_HOST` (defaults to `127.0.0.1`) and `HOSPITAL_DB_PORT` (defaults to `3306`). Alternatively, create the ignored local file `backend\config\database.local.php` returning `host`, `port`, `database`, `username`, and `password`. Environment variables override matching local settings. Restart Apache after changing its environment.
+5. Create the initial administrator from PowerShell, with the database settings available in that process:
 
-## Current state
-The repository includes authentication and administration, reception, billing,
-nursing, general doctor, testing desk, laboratory, radiology, cardiac,
-specialist referral, therapy, pharmacy, visit tracking, audit-log viewing and
-reports. PHP syntax has been checked across all PHP files. The full nine-path
-end-to-end demo has **not** been run: this checkout has no demo accounts for
-most roles, and the emergency user interface/API is not implemented. Do not
-describe all workflows as end-to-end tested.
+   ```powershell
+   & C:\xampp\php\php.exe C:\xampp\htdocs\hospital-system\backend\setup\create_admin.php
+   ```
 
-Remaining limitations: card and medical-aid approvals are simulated; fees and
-medicine catalogue values are demo data; medication-only visits reuse an active
-undispensed prescription from an earlier visit (the documented workflow
-assumption); emergency care currently has schema support but no working
-department module. This academic prototype is not for clinical or production use.
+   The CLI script prompts for the name, username and password, hashes the password, and refuses to create another initial administrator. Use a password of at least 12 characters. Do not commit credentials or leave the setup script exposed after initial setup.
+6. Open `http://localhost/hospital-system/` for the project landing page, or `http://localhost/hospital-system/auth/login.php` to sign in. Administrators create staff accounts; public registration is disabled.
 
-## Backend and authentication
-The root `index.php` introduces the project and links to staff sign-in. The
-login page is `auth/login.php`; public registration is disabled, and
-`frontend/signup.php` displays that notice;
-the staff dashboard is `frontend/dashboard.php`. Reception staff use
-`frontend/reception/index.php`; nurses use `frontend/nursing/index.php`;
-administrator pages are under `frontend/admin/`. The API entry point is
-`backend/index.php`.
-The API paths are provisional and have been compared with Person 3's proposed
-specification; see [`docs/API_MAPPING.md`](./docs/API_MAPPING.md). Configure the
-database environment and create the initial administrator as described in
-[`docs/AUTHENTICATION.md`](./docs/AUTHENTICATION.md). Reception setup, API
-routes, workflow status rules, and Postman tests are in
-[`docs/RECEPTION.md`](./docs/RECEPTION.md). Nursing schema migration, API
-contracts and test steps are in [`docs/NURSING.md`](./docs/NURSING.md).
-General doctor schema migration, clinical workflow, API contracts and test
-steps are in [`docs/DOCTOR.md`](./docs/DOCTOR.md).
-Testing-centre routing and laboratory, radiology, and cardiac workflows,
-including the Stage 5 migration and API contracts, are documented in
-[`docs/STAGE5_TESTING.md`](./docs/STAGE5_TESTING.md).
-The role-based demo script and its current test limitations are in
-[`docs/DEMO.md`](./docs/DEMO.md).
+The project detects its URL base path from the folder under `htdocs`, so it can also run from a differently named project subfolder. Use that folder name in the local URL. No URL rewriting or virtual-host configuration is required.
+
+The API entry point is `http://localhost/hospital-system/backend/index.php`. URL rewriting is not required; API requests use the `route` query parameter. A health check is available at:
+
+```text
+http://localhost/hospital-system/backend/index.php?route=%2Fapi%2Fhealth
+```
+
+## Project layout
+
+- `backend/` - PHP API, controllers, routes, middleware, models and configuration
+- `frontend/` - role-oriented department pages
+- `assets/` - shared styles and scripts
+- `database/` - schema, demo seed data and migrations
+- `auth/` - staff sign-in
+- `patient hospital system report.pdf` - consolidated CSC411 assignment report
+
+## Scope and limitations
+
+The repository includes modules for administration, reception, billing, nursing, general doctor, testing desk, laboratory, radiology, cardiac, specialists, therapy, pharmacy, visit tracking, audit viewing and reports. Module presence does not mean each workflow has passed an end-to-end test. Create role-specific demo accounts and follow the relevant pages to demonstrate individual paths.
+
+Card and medical-aid approvals are simulated. Fees and medicine catalogue values are demo data. The medication-only flow uses an active undispensed prescription from an earlier visit as a documented assumption. API paths remain provisional. Emergency and cardiac changes may require migrations before use; complete authenticated workflows have not been verified in this checkout.
+
+## Development
+
+Use Visual Studio Code and Git. API requests use JSON over HTTP; retain the PHP session cookie and obtain a CSRF token from the authentication API for state-changing requests. Postman can be used to exercise individual endpoints. Use only fictional patient records and locally chosen staff passwords.
