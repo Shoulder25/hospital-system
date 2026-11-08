@@ -96,6 +96,8 @@ function testingOrderRows(
             . implode(', ', $typePlaceholders) . ')';
         if ($scope === 'laboratory') {
             $departmentFilter .= ' AND t.testing_desk_routed_at IS NOT NULL';
+        } elseif ($scope === 'cardiac') {
+            $departmentFilter .= ' AND t.testing_desk_routed_at IS NOT NULL';
         }
     }
 
@@ -130,13 +132,17 @@ function testingOrderRows(
     $searchFilter = '';
     if ($search !== '') {
         $pattern = '%' . $search . '%';
+        $patientIdFilter = $scope === 'cardiac'
+            ? ' OR CAST(p.patient_id AS CHAR) LIKE :patient_id'
+            : '';
         $searchFilter = ' AND (
             p.patient_number LIKE :patient_number
             OR p.first_name LIKE :first_name
             OR p.last_name LIKE :last_name
             OR CONCAT_WS(\' \', p.first_name, p.last_name) LIKE :full_name
             OR CAST(v.visit_id AS CHAR) LIKE :visit_id
-            OR CAST(t.test_order_id AS CHAR) LIKE :order_id
+            OR CAST(t.test_order_id AS CHAR) LIKE :order_id'
+            . $patientIdFilter . '
         )';
         $parameters += [
             'patient_number' => $pattern,
@@ -146,6 +152,9 @@ function testingOrderRows(
             'visit_id' => $pattern,
             'order_id' => $pattern,
         ];
+        if ($scope === 'cardiac') {
+            $parameters['patient_id'] = $pattern;
+        }
     }
 
     $statement = $database->prepare(
@@ -352,6 +361,10 @@ function handleTestingOrdersGet(
             continue;
         }
         if ($scope === 'laboratory'
+            && $countRow['testing_desk_routed_at'] === null) {
+            continue;
+        }
+        if ($scope === 'cardiac'
             && $countRow['testing_desk_routed_at'] === null) {
             continue;
         }
@@ -905,7 +918,8 @@ function handleTestingResultCreate(string $department): void
             if ($department === 'cardiac') {
                 cardiacCompleteLatestAttempt(
                     $database,
-                    (int) $orderId
+                    (int) $orderId,
+                    (int) $user['user_id']
                 );
             }
             if ($department === 'laboratory') {

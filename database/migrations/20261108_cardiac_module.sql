@@ -5,6 +5,7 @@ CREATE TABLE cardiac_examination_attempts (
     cardiac_examination_attempt_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     test_order_id INT UNSIGNED NOT NULL,
     technician_user_id INT UNSIGNED NOT NULL,
+    completed_by_user_id INT UNSIGNED NULL,
     status ENUM('in_progress', 'unsuccessful', 'completed') NOT NULL,
     started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME NULL,
@@ -15,7 +16,10 @@ CREATE TABLE cardiac_examination_attempts (
     CONSTRAINT fk_cardiac_attempts_order
         FOREIGN KEY (test_order_id) REFERENCES test_orders (test_order_id),
     CONSTRAINT fk_cardiac_attempts_technician
-        FOREIGN KEY (technician_user_id) REFERENCES users (user_id)
+        FOREIGN KEY (technician_user_id) REFERENCES users (user_id),
+    CONSTRAINT fk_cardiac_attempts_completed_by
+        FOREIGN KEY (completed_by_user_id) REFERENCES users (user_id)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE cardiac_files (

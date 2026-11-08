@@ -108,10 +108,13 @@ function cardiacExaminationAttemptsForOrders(PDO $database, array $orderIds): ar
     $statement = $database->prepare(
         'SELECT attempt.cardiac_examination_attempt_id, attempt.test_order_id,
                 attempt.status, attempt.started_at, attempt.completed_at,
-                attempt.failure_reason, technician.display_name AS technician
+                attempt.failure_reason, technician.display_name AS technician,
+                completer.display_name AS completed_by
          FROM cardiac_examination_attempts attempt
          INNER JOIN users technician
             ON technician.user_id = attempt.technician_user_id
+         LEFT JOIN users completer
+            ON completer.user_id = attempt.completed_by_user_id
          WHERE attempt.test_order_id IN (' . implode(', ', $placeholders) . ')
          ORDER BY attempt.test_order_id, attempt.cardiac_examination_attempt_id'
     );
@@ -127,6 +130,7 @@ function cardiacExaminationAttemptsForOrders(PDO $database, array $orderIds): ar
             'completed_at' => $row['completed_at'],
             'failure_reason' => $row['failure_reason'],
             'technician' => $row['technician'],
+            'completed_by' => $row['completed_by'],
         ];
     }
 
@@ -147,7 +151,7 @@ function cardiacLatestAttemptForUpdate(PDO $database, int $orderId): array|false
     return $statement->fetch();
 }
 
-function cardiacCompleteLatestAttempt(PDO $database, int $orderId): void
+function cardiacCompleteLatestAttempt(PDO $database, int $orderId, int $userId): void
 {
     $attempt = cardiacLatestAttemptForUpdate($database, $orderId);
     if ($attempt === false) {
@@ -159,12 +163,14 @@ function cardiacCompleteLatestAttempt(PDO $database, int $orderId): void
 
     $statement = $database->prepare(
         'UPDATE cardiac_examination_attempts
-         SET status = \'completed\', completed_at = CURRENT_TIMESTAMP
+         SET status = \'completed\', completed_at = CURRENT_TIMESTAMP,
+             completed_by_user_id = :user_id
          WHERE cardiac_examination_attempt_id = :attempt_id
            AND status = \'in_progress\''
     );
     $statement->execute([
         'attempt_id' => (int) $attempt['cardiac_examination_attempt_id'],
+        'user_id' => $userId,
     ]);
     if ($statement->rowCount() !== 1) {
         jsonError('The ECG examination attempt changed before report submission.', [], 409);
@@ -320,13 +326,14 @@ function handleCardiacExaminationFailure(string $orderId): void
         $update = $database->prepare(
             'UPDATE cardiac_examination_attempts
              SET status = \'unsuccessful\', completed_at = CURRENT_TIMESTAMP,
-                 failure_reason = :reason
+                 failure_reason = :reason, completed_by_user_id = :user_id
              WHERE cardiac_examination_attempt_id = :attempt_id
                AND status = \'in_progress\''
         );
         $update->execute([
             'reason' => trim($reason),
             'attempt_id' => (int) $attempt['cardiac_examination_attempt_id'],
+            'user_id' => (int) $user['user_id'],
         ]);
         if ($update->rowCount() !== 1) {
             $database->rollBack();

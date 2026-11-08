@@ -234,6 +234,8 @@
             } else if (order.status === 'in_progress'
                 && order.cardiac_attempts?.[order.cardiac_attempts.length - 1]?.status === 'unsuccessful') {
                 action.appendChild(makeButton('Restart examination', () => startOrder(order)));
+            } else if (order.status === 'cancelled') {
+                action.appendChild(orderLink(order, 'View history', 'order-details.php'));
             } else {
                 const targetPage = order.status === 'completed'
                     ? 'reports.php'
@@ -296,7 +298,7 @@
             }
         }
         if (scope === 'cardiac') {
-            if (page === 'orders') {
+            if (page === 'orders' && !state.status) {
                 selected = selected.filter((order) => Boolean(order.desk_routed_at)
                     && order.status !== 'completed'
                     && order.status !== 'cancelled');
@@ -731,7 +733,7 @@
                 article.appendChild(reason);
             }
             const technician = document.createElement('small');
-            technician.textContent = `Technician: ${attempt.technician || 'Staff'}`;
+            technician.textContent = `Started by ${attempt.technician || 'staff'}${attempt.completed_by ? ` · Ended by ${attempt.completed_by}` : ''}`;
             article.appendChild(technician);
             target.appendChild(article);
         });
@@ -779,7 +781,7 @@
         const invalidFile = files.find((file) => {
             const extension = file.name.split('.').pop().toLowerCase();
             return !allowedExtensions.includes(extension)
-                || !allowedMimeTypes.includes(file.type)
+                || (file.type !== '' && !allowedMimeTypes.includes(file.type))
                 || file.size < 1
                 || file.size > 15 * 1024 * 1024;
         });
