@@ -249,6 +249,95 @@
         document.querySelector(selector).hidden = !visible;
     }
 
+    function renderNursingHandover(data) {
+        const visit = data.visit;
+        const assessment = data.nursing_assessment;
+        const observations = data.nursing_observations || [];
+        const handoverStatus = visit.encounter?.handover_status || 'not_requested';
+        const section = document.querySelector('[data-nursing-handover]');
+        section.hidden = !assessment && observations.length === 0
+            && !['pending', 'accepted'].includes(handoverStatus);
+        appendText(
+            document.querySelector('[data-handover-complaint]'),
+            `Presenting complaint: ${visit.reason_for_visit || '—'}`
+        );
+        appendText(
+            document.querySelector('[data-handover-doctor-status]'),
+            handoverStatus === 'pending'
+                ? 'Handover is waiting for Emergency Doctor acceptance.'
+                : handoverStatus === 'accepted'
+                    ? `Handover accepted${visit.encounter?.handover_accepted_at
+                        ? ` at ${formatDateTime(visit.encounter.handover_accepted_at)}`
+                        : ''}.`
+                    : 'No nurse handover has been requested.'
+        );
+
+        const assessmentFacts = document.querySelector('[data-handover-assessment]');
+        assessmentFacts.replaceChildren();
+        if (assessment) {
+            [
+                ['Assessment status', pretty(assessment.status)],
+                ['Nurse', assessment.nurse_name],
+                ['Symptoms', assessment.symptoms],
+                ['Blood pressure', assessment.blood_pressure],
+                ['Pulse', assessment.pulse],
+                ['Respiratory rate', assessment.respiratory_rate],
+                ['Temperature', assessment.temperature],
+                ['Oxygen saturation', assessment.oxygen_saturation],
+                ['Consciousness level', assessment.consciousness_level],
+                ['Pain score', assessment.pain_score],
+                ['Allergies', assessment.allergies],
+                ['Visible injuries', assessment.visible_injuries],
+                ['Triage priority', assessment.triage_priority],
+                ['Nursing notes', assessment.nursing_notes],
+                ['Immediate care', assessment.immediate_care],
+            ].forEach(([label, value]) => {
+                const wrapper = document.createElement('div');
+                const term = document.createElement('dt');
+                const detail = document.createElement('dd');
+                term.textContent = label;
+                detail.textContent = value || '—';
+                wrapper.append(term, detail);
+                assessmentFacts.appendChild(wrapper);
+            });
+        }
+
+        const observationRows = document.querySelector('[data-handover-observations]');
+        observationRows.replaceChildren();
+        if (!observations.length) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 4;
+            cell.className = 'table-message';
+            cell.textContent = 'No separate observations have been recorded.';
+            row.appendChild(cell);
+            observationRows.appendChild(row);
+        }
+        observations.forEach((observation) => {
+            const row = document.createElement('tr');
+            [
+                formatDateTime(observation.recorded_at),
+                [
+                    observation.blood_pressure ? `BP ${observation.blood_pressure}` : '',
+                    observation.pulse ? `Pulse ${observation.pulse}` : '',
+                    observation.respiratory_rate ? `RR ${observation.respiratory_rate}` : '',
+                    observation.temperature ? `Temp ${observation.temperature}` : '',
+                    observation.oxygen_saturation ? `O₂ ${observation.oxygen_saturation}` : '',
+                    observation.consciousness_level,
+                    observation.pain_score ? `Pain ${observation.pain_score}` : '',
+                ].filter(Boolean).join(' · ') || '—',
+                [observation.nursing_notes, observation.immediate_care]
+                    .filter(Boolean).join(' · ') || '—',
+                observation.nurse_name,
+            ].forEach((value) => {
+                const cell = document.createElement('td');
+                cell.textContent = value || '—';
+                row.appendChild(cell);
+            });
+            observationRows.appendChild(row);
+        });
+    }
+
     function renderDetail(data) {
         const visit = data.visit;
         state.detail = data;
@@ -263,6 +352,7 @@
         appendText(document.querySelector('[data-encounter-doctor]'), visit.encounter?.emergency_doctor_name);
         appendText(document.querySelector('[data-triage-level]'), visit.encounter?.triage_level);
         appendText(document.querySelector('[data-encounter-started]'), formatDateTime(visit.encounter?.started_at));
+        renderNursingHandover(data);
         const notes = document.querySelector('[data-stabilization-notes]');
         notes.textContent = visit.encounter?.stabilization_notes || '';
         notes.hidden = !visit.encounter?.stabilization_notes;
@@ -271,6 +361,11 @@
         const canTreat = state.role === 'emergency_doctor';
         const encounterActive = visit.encounter_status === 'in_progress';
         setVisible('[data-encounter-create-section]', canTreat && visit.encounter_status === 'not_started');
+        setVisible(
+            '[data-accept-handover-section]',
+            canTreat && visit.encounter?.handover_status === 'pending'
+                && !visit.encounter?.emergency_doctor_id
+        );
         setVisible('[data-nurse-section]', canTreat && encounterActive);
         setVisible('[data-prescription-section]', canTreat && encounterActive
             && !data.prescriptions.some((prescription) => prescription.status === 'active'));
@@ -350,6 +445,23 @@
             (values) => values,
             'Emergency encounter started. Emergency-care charges are deferred to Pharmacy.'
         );
+
+        document.querySelector('[data-accept-handover]').addEventListener('click', async (event) => {
+            const button = event.currentTarget;
+            button.disabled = true;
+            try {
+                await parseRequest(
+                    `/api/emergency/visits/${state.activeVisitId}/accept`,
+                    { method: 'POST', body: JSON.stringify({}) }
+                );
+                showMessage('Emergency Nurse handover accepted.', 'success');
+                await refreshVisit();
+            } catch (error) {
+                showMessage(error.message);
+            } finally {
+                button.disabled = false;
+            }
+        });
         addFormHandler(
             '[data-nurse-form]',
             'nurses',

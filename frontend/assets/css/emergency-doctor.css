@@ -1,0 +1,48 @@
+.emergency-doctor-content { display: grid; gap: 20px; }
+.emergency-doctor-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; }
+.emergency-doctor-stat { display: grid; gap: 7px; border: 1px solid #e6edef; border-radius: 12px; padding: 17px; background: #fff; color: #30494f; text-decoration: none; }
+.emergency-doctor-stat:hover { border-color: #9dc6cb; box-shadow: 0 7px 22px rgb(34 77 84 / 7%); }
+.emergency-doctor-stat > span { color: #61777e; font-size: 11px; font-weight: 700; }
+.emergency-doctor-stat strong { color: #145a64; font-size: 28px; line-height: 1.1; }
+.emergency-doctor-stat small { color: #819095; font-size: 10px; }
+.emergency-doctor-panel { display: grid; gap: 18px; }
+.emergency-doctor-activity-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.emergency-doctor-activity-links a { display: grid; gap: 5px; border: 1px solid #e7eef0; border-radius: 9px; padding: 14px; color: #30494f; text-decoration: none; }
+.emergency-doctor-activity-links a:hover { border-color: #9dc6cb; background: #f7fbfb; }
+.emergency-doctor-activity-links strong { font-size: 12px; }
+.emergency-doctor-activity-links span { color: #71858b; font-size: 11px; line-height: 1.5; }
+.emergency-doctor-case[hidden] { display: none; }
+.emergency-doctor-case { display: grid; gap: 18px; }
+.emergency-doctor-subsection { display: grid; gap: 12px; border-top: 1px solid #e8eef0; padding-top: 17px; }
+.emergency-doctor-subsection h3, .emergency-doctor-subsection h2 { margin: 0; color: #30494f; font-size: 15px; }
+.emergency-doctor-subsection p { margin: 0; color: #647a83; font-size: 12px; line-height: 1.6; }
+.emergency-doctor-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.emergency-doctor-case-nav { display: flex; flex-wrap: wrap; gap: 8px; border-top: 1px solid #e8eef0; padding-top: 16px; }
+.emergency-doctor-workspace { display: grid; gap: 22px; }
+.emergency-doctor-workspace > .emergency-form { width: 100%; max-width: 860px; }
+.emergency-doctor-workspace h2 { margin: 0; color: #30494f; font-size: 17px; }
+.emergency-doctor-workspace p { margin: 0; color: #71858b; font-size: 11px; line-height: 1.6; }
+.emergency-doctor-divider { border-top: 1px solid #e8eef0; padding-top: 20px; }
+.emergency-doctor-test-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; border: 1px solid #e1e9eb; border-radius: 8px; padding: 14px; }
+.emergency-doctor-test-options legend { padding: 0 5px; color: #536a71; font-size: 11px; font-weight: 700; }
+.emergency-doctor-test-options label, .emergency-doctor-checkbox { display: flex !important; align-items: flex-start; gap: 8px !important; }
+.emergency-doctor-test-options input, .emergency-doctor-checkbox input { width: auto !important; min-height: auto !important; margin: 2px 0 0; }
+.emergency-doctor-form-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.emergency-doctor-medicine-items { display: grid; gap: 12px; }
+.emergency-doctor-medicine-item { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 10px; border: 1px solid #e7eef0; border-radius: 9px; padding: 13px; }
+.emergency-doctor-medicine-item .button { justify-self: start; }
+.emergency-doctor-case table td { white-space: pre-line; }
+@media (max-width: 900px) {
+    .emergency-doctor-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .emergency-doctor-medicine-item { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+    .emergency-doctor-activity-links, .emergency-doctor-test-options { grid-template-columns: 1fr; }
+    .emergency-doctor-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .emergency-doctor-medicine-item { grid-template-columns: 1fr; }
+}
+@media (max-width: 420px) {
+    .emergency-doctor-stat-grid { grid-template-columns: 1fr; }
+    .emergency-doctor-facts { grid-template-columns: 1fr; }
+    .emergency-doctor-form-heading { align-items: flex-start; flex-direction: column; }
+}

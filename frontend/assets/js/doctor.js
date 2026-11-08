@@ -3,6 +3,7 @@
 (() => {
     const projectBase = new URL('../../../', document.currentScript.src).pathname;
     const apiEntry = new URL(`${projectBase}backend/index.php`, window.location.origin);
+    const doctorPage = document.body.dataset.doctorPage || 'dashboard';
     const messageElement = document.querySelector('[data-doctor-message]');
     const queueBody = document.querySelector('[data-queue-rows]');
     const recordElement = document.querySelector('[data-doctor-record]');
@@ -142,6 +143,7 @@
     }
 
     function emptyRow(message) {
+        if (!queueBody) return;
         queueBody.replaceChildren();
         const row = document.createElement('tr');
         const cell = document.createElement('td');
@@ -190,10 +192,34 @@
         });
         medicines = data.medicines;
         specialists = data.specialists;
-        await loadQueue();
+        renderRecentActivity(data.recent_activity || []);
+        if (queueBody) await loadQueue();
+    }
+
+    function renderRecentActivity(activity) {
+        const body = document.querySelector('[data-doctor-recent-activity]');
+        if (!body) return;
+        body.replaceChildren();
+        if (!activity.length) {
+            const row = document.createElement('tr');
+            const cell = appendCell(row, 'No recent consultations are recorded.', 'table-message');
+            cell.colSpan = 5;
+            body.appendChild(row);
+            return;
+        }
+        activity.forEach((item) => {
+            const row = document.createElement('tr');
+            appendCell(row, `${item.patient_name} · ${item.patient_number}`);
+            appendCell(row, `#${item.visit_id}`);
+            appendCell(row, formatDateTime(item.updated_at));
+            appendCell(row, [item.presenting_complaint, item.diagnosis].filter(Boolean).join(' · ') || label(item.next_step));
+            appendCell(row, label(item.visit_status));
+            body.appendChild(row);
+        });
     }
 
     async function loadQueue(search = '') {
+        if (!queueBody) return;
         emptyRow('Loading consultation queue…');
         try {
             const data = await parseRequest(
@@ -219,17 +245,24 @@
                 const statusCell = appendCell(row, '');
                 statusCell.appendChild(status);
                 const markers = [
-                    visit.has_assessment ? 'Assessment available' : 'No nurse assessment',
-                    visit.has_results ? 'Results available' : 'No results yet',
+                    visit.nursing_reason || (visit.has_assessment ? 'Nursing assessment available' : 'No nurse assessment'),
+                    visit.final_test_summary || (visit.has_results ? 'Results available' : 'No results yet'),
                 ];
                 appendCell(row, markers.join(' · '));
                 const actionCell = appendCell(row, '', 'doctor-action-cell');
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.className = 'button button-primary button-small';
-                button.textContent = 'Open visit';
-                button.addEventListener('click', () => openVisit(visit.visit_id));
+                button.textContent = 'Clinical record';
+                button.addEventListener('click', () => {
+                    window.location.href = `clinical-record.php?visit_id=${encodeURIComponent(visit.visit_id)}`;
+                });
                 actionCell.appendChild(button);
+                const consultLink = document.createElement('a');
+                consultLink.className = 'button button-outline button-small';
+                consultLink.href = `consultation.php?visit_id=${encodeURIComponent(visit.visit_id)}`;
+                consultLink.textContent = 'Consult';
+                actionCell.append(document.createTextNode(' '), consultLink);
                 if (visit.is_emergency) {
                     row.classList.add('doctor-visit-emergency');
                 }
@@ -364,7 +397,64 @@
         });
     }
 
+    function renderPrescriptions(prescriptions, medicationHistory) {
+        const target = document.querySelector('[data-prescriptions]');
+        if (!target) return;
+        target.replaceChildren();
+        if (!prescriptions.length && !medicationHistory.length) {
+            target.appendChild(Object.assign(document.createElement('p'), {
+                className: 'doctor-empty',
+                textContent: 'No prescriptions or medication history are recorded.',
+            }));
+            return;
+        }
+        prescriptions.forEach((prescription) => {
+            addTextCard(
+                target,
+                `Prescription #${prescription.prescription_id} · ${label(prescription.status)}`,
+                [
+                    `Prescribed by: ${prescription.prescribed_by || '—'} · ${formatDateTime(prescription.created_at)}`,
+                    ...prescription.items.map((item) => [
+                        `${item.medicine_name} · ${item.quantity}`,
+                        item.dosage,
+                        item.frequency,
+                        item.duration,
+                        item.instructions,
+                    ].filter(Boolean).join(' · ')),
+                ]
+            );
+        });
+        medicationHistory.forEach((item) => {
+            addTextCard(
+                target,
+                `Visit #${item.visit_id} · ${formatDateTime(item.arrived_at)} · ${label(item.status)}`,
+                [`${item.medicine_name} · ${item.quantity}`, item.dosage, item.frequency, item.duration, item.instructions, item.dispensed_at ? `Dispensed ${formatDateTime(item.dispensed_at)}` : 'Not dispensed']
+            );
+        });
+    }
+
+    function renderReferrals(referrals) {
+        const target = document.querySelector('[data-visit-referrals]');
+        if (!target) return;
+        target.replaceChildren();
+        if (!referrals.length) {
+            target.appendChild(Object.assign(document.createElement('p'), {
+                className: 'doctor-empty',
+                textContent: 'No specialist, therapy, or outside referrals are recorded for this visit.',
+            }));
+            return;
+        }
+        referrals.forEach((referral) => {
+            addTextCard(
+                target,
+                `${label(referral.type)} referral #${referral.referral_id} · ${label(referral.status)}`,
+                [`Destination: ${referral.destination || '—'}`, referral.reason, referral.details, `Created: ${formatDateTime(referral.created_at)}`]
+            );
+        });
+    }
+
     function populateSpecialists() {
+        if (!diagnosisForm) return;
         const select = diagnosisForm.elements.specialist_user_id;
         const selected = select.value;
         select.replaceChildren(new Option('Choose an active specialist', ''));
@@ -431,19 +521,36 @@
 
     function prepareClinicalForms(data) {
         activeVisitId = data.visit.visit_id;
-        consultationForm.reset();
-        diagnosisForm.reset();
-        document.querySelector('[data-prescription-items]').replaceChildren();
+        consultationForm?.reset();
+        diagnosisForm?.reset();
+        document.querySelector('[data-prescription-items]')?.replaceChildren();
         renderPatientDetails(data.patient, data.visit);
         renderAssessment(data.nursing_assessment);
         renderResults(data.test_results);
         renderHistory(data.history);
         renderClinicalRecords(data.consultations, data.diagnoses);
+        renderPrescriptions(data.prescriptions || [], data.medication_history || []);
+        renderReferrals(data.referrals || []);
         populateSpecialists();
 
         const recordSummary = document.querySelector('[data-record-summary]');
-        recordSummary.textContent =
-            `${data.patient.full_name} · ${data.patient.patient_number} · Visit #${data.visit.visit_id}`;
+        if (recordSummary) {
+            recordSummary.textContent =
+                `${data.patient.full_name} · ${data.patient.patient_number} · Visit #${data.visit.visit_id}`;
+        }
+        document.querySelector('[data-record-consult]')?.setAttribute(
+            'href',
+            `consultation.php?visit_id=${encodeURIComponent(data.visit.visit_id)}`
+        );
+        document.querySelector('[data-clinical-record]')?.setAttribute(
+            'href',
+            `clinical-record.php?visit_id=${encodeURIComponent(data.visit.visit_id)}`
+        );
+        if (!consultationForm || !diagnosisForm) {
+            recordElement.hidden = false;
+            recordElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+        }
         const pending = data.consultations.find((item) => item.next_step === 'undecided');
         if (pending) {
             consultationForm.hidden = true;
@@ -569,7 +676,7 @@
         setBusy(button, true, 'Submitting decision…');
         const formData = new FormData(diagnosisForm);
         try {
-            await parseRequest(
+            const result = await parseRequest(
                 '/api/diagnoses',
                 {
                     method: 'POST',
@@ -597,11 +704,11 @@
             showMessage('Clinical decision saved. The visit has been routed to the next workflow step.', 'success');
             diagnosisForm.hidden = true;
             consultationForm.hidden = true;
-            await loadDashboard();
             window.setTimeout(() => {
-                recordElement.hidden = true;
-                activeVisitId = null;
-            }, 1200);
+                window.location.href = result.status === 'completed'
+                    ? 'history.php'
+                    : 'queue.php';
+            }, 900);
         } catch (error) {
             showMessage(error.message);
         } finally {
@@ -609,8 +716,110 @@
         }
     }
 
+    function emptyTable(target, columns, message) {
+        target.replaceChildren();
+        const row = document.createElement('tr');
+        const cell = appendCell(row, message, 'table-message');
+        cell.colSpan = columns;
+        target.appendChild(row);
+    }
+
+    function renderConsultationHistory(records) {
+        const body = document.querySelector('[data-history-rows]');
+        if (!body) return;
+        body.replaceChildren();
+        if (!records.length) {
+            emptyTable(body, 7, 'No completed consultations match this search.');
+            return;
+        }
+        records.forEach((item) => {
+            const row = document.createElement('tr');
+            appendCell(row, `${item.patient_name} · ${item.patient_number}`);
+            appendCell(row, `#${item.visit_id} · ${label(item.visit_source)}`);
+            appendCell(row, formatDateTime(item.consulted_at));
+            appendCell(row, [item.presenting_complaint, item.clinical_observations, item.examination_findings].filter(Boolean).join('\n'));
+            appendCell(row, [item.diagnosis, item.treatment_plan].filter(Boolean).join('\n'));
+            appendCell(row, label(item.visit_status));
+            const action = appendCell(row, '');
+            const link = document.createElement('a');
+            link.className = 'button button-outline button-small';
+            link.href = `clinical-record.php?visit_id=${encodeURIComponent(item.visit_id)}`;
+            link.textContent = 'Open record';
+            action.appendChild(link);
+            body.appendChild(row);
+        });
+    }
+
+    async function loadConsultationHistory(search = '') {
+        const body = document.querySelector('[data-history-rows]');
+        if (!body) return;
+        emptyTable(body, 7, 'Loading consultation history…');
+        try {
+            const data = await parseRequest(
+                '/api/doctor/history',
+                { query: { search } },
+                'Could not load consultation history.'
+            );
+            renderConsultationHistory(data.consultations);
+        } catch (error) {
+            emptyTable(body, 7, error.message);
+        }
+    }
+
+    function renderDoctorReferrals(referrals) {
+        const body = document.querySelector('[data-referral-rows]');
+        if (!body) return;
+        body.replaceChildren();
+        if (!referrals.length) {
+            emptyTable(body, 7, 'No referral activity matches this search.');
+            return;
+        }
+        referrals.forEach((item) => {
+            const row = document.createElement('tr');
+            appendCell(row, label(item.referral_type));
+            appendCell(row, `${item.patient_name} · ${item.patient_number}`);
+            appendCell(row, `#${item.visit_id}`);
+            appendCell(row, formatDateTime(item.created_at));
+            appendCell(row, [item.destination, item.reason, item.details].filter(Boolean).join('\n'));
+            appendCell(row, `${label(item.status)} · ${label(item.visit_status)}`);
+            const action = appendCell(row, '');
+            const link = document.createElement('a');
+            link.className = 'button button-outline button-small';
+            link.href = `clinical-record.php?visit_id=${encodeURIComponent(item.visit_id)}`;
+            link.textContent = 'Open record';
+            action.appendChild(link);
+            body.appendChild(row);
+        });
+    }
+
+    async function loadDoctorReferrals(search = '') {
+        const body = document.querySelector('[data-referral-rows]');
+        if (!body) return;
+        emptyTable(body, 7, 'Loading referrals…');
+        try {
+            const data = await parseRequest(
+                '/api/doctor/referrals',
+                { query: { search } },
+                'Could not load Doctor referrals.'
+            );
+            renderDoctorReferrals(data.referrals);
+        } catch (error) {
+            emptyTable(body, 7, error.message);
+        }
+    }
+
+    function bindListSearch(selector, loader) {
+        const input = document.querySelector(selector);
+        if (!input) return;
+        input.addEventListener('input', () => {
+            window.clearTimeout(searchTimer);
+            searchTimer = window.setTimeout(() => loader(input.value.trim()), 250);
+        });
+    }
+
     function setupSearch() {
         const input = document.querySelector('[data-doctor-search]');
+        if (!input) return;
         input.addEventListener('input', () => {
             window.clearTimeout(searchTimer);
             searchTimer = window.setTimeout(() => loadQueue(input.value.trim()), 250);
@@ -618,7 +827,9 @@
     }
 
     function setupLogout() {
-        document.querySelector('[data-sign-out]').addEventListener('click', async (event) => {
+        const logoutButton = document.querySelector('[data-sign-out]');
+        if (!logoutButton) return;
+        logoutButton.addEventListener('click', async (event) => {
             const button = event.currentTarget;
             button.disabled = true;
             try {
@@ -633,33 +844,58 @@
 
     async function init() {
         const date = document.querySelector('[data-current-date]');
-        date.textContent = new Intl.DateTimeFormat(undefined, {
-            weekday: 'short',
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-        }).format(new Date());
+        if (date) {
+            date.textContent = new Intl.DateTimeFormat(undefined, {
+                weekday: 'short',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+            }).format(new Date());
+        }
         try {
             if (!await checkSession()) return;
-            setupSearch();
             setupLogout();
-            consultationForm.addEventListener('submit', submitConsultation);
-            diagnosisForm.addEventListener('submit', submitDiagnosis);
-            diagnosisForm.elements.diagnosis_made.addEventListener('change', updateOutcomeFields);
-            diagnosisForm.elements.outcome.addEventListener('change', updateOutcomeFields);
-            diagnosisForm.elements.refer_for_therapy.addEventListener('change', updateOutcomeFields);
-            document.querySelector('[data-add-prescription-item]').addEventListener('click', createPrescriptionItem);
-            document.querySelector('[data-close-record]').addEventListener('click', () => {
-                recordElement.hidden = true;
-                activeVisitId = null;
-                hideMessage();
-            });
-            document.querySelector('[data-cancel-decision]').addEventListener('click', () => {
-                recordElement.hidden = true;
-                activeVisitId = null;
-                hideMessage();
-            });
-            await loadDashboard();
+            if (doctorPage === 'dashboard') {
+                await loadDashboard();
+                return;
+            }
+            if (doctorPage === 'queue') {
+                setupSearch();
+                await loadQueue();
+                return;
+            }
+            if (doctorPage === 'history') {
+                bindListSearch('[data-history-search]', loadConsultationHistory);
+                await loadConsultationHistory();
+                return;
+            }
+            if (doctorPage === 'referrals') {
+                bindListSearch('[data-referral-search]', loadDoctorReferrals);
+                await loadDoctorReferrals();
+                return;
+            }
+
+            if (!recordElement) return;
+            recordElement.hidden = true;
+            document.querySelector('[data-doctor-record-empty]')?.setAttribute('hidden', '');
+            if (doctorPage === 'consultation') {
+                await loadDashboard();
+                consultationForm?.addEventListener('submit', submitConsultation);
+                diagnosisForm?.addEventListener('submit', submitDiagnosis);
+                diagnosisForm?.elements.diagnosis_made.addEventListener('change', updateOutcomeFields);
+                diagnosisForm?.elements.outcome.addEventListener('change', updateOutcomeFields);
+                diagnosisForm?.elements.refer_for_therapy.addEventListener('change', updateOutcomeFields);
+                document.querySelector('[data-add-prescription-item]')?.addEventListener('click', createPrescriptionItem);
+                document.querySelector('[data-cancel-decision]')?.addEventListener('click', () => {
+                    window.location.href = 'queue.php';
+                });
+            }
+            const visitId = new URLSearchParams(window.location.search).get('visit_id');
+            if (!visitId || !/^\d+$/.test(visitId)) {
+                document.querySelector('[data-doctor-record-empty]')?.removeAttribute('hidden');
+                return;
+            }
+            await openVisit(visitId);
         } catch (error) {
             showMessage(error.message);
         }

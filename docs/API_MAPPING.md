@@ -47,7 +47,7 @@ does not treat the proposal as final. Routes are dispatched through
 | Billing | `POST /api/bills` | — | Bills are created within ticket/pharmacy/therapy workflows |
 | Billing | `POST /api/payments` | `POST /api/billing/visits/{id}/ticket-payment`; `POST /api/pharmacy/visits/{id}/payments` | Separate ticket and pharmacy paths |
 | Billing | `GET /api/payments/{id}` | `GET /api/billing/payments/{id}/receipt`; `GET /api/pharmacy/payments/{id}/receipt` | Role-specific receipt routes |
-| Emergency | No corresponding route identified in the supplied proposal | `GET /api/emergency/queue`; `GET /api/emergency/visits/{id}`; `POST /api/emergency/visits/{id}/encounter`; `POST /api/emergency/visits/{id}/nurses`; `POST /api/emergency/visits/{id}/prescription`; `POST /api/emergency/visits/{id}/finish` | Current emergency paths are provisional |
+| Emergency | No corresponding route identified in the supplied proposal | Nurse: `GET /api/emergency/nurse/dashboard`, `/queue`, `/visits/{id}`; `POST /api/emergency/nurse/visits/{id}/acknowledge`, `/assessment`, `/observations`, `/handover`. Doctor: `GET /api/emergency/queue`, `/visits/{id}`; `POST /api/emergency/visits/{id}/accept`, `/encounter`, `/nurses`, `/prescription`, `/finish` | Current emergency paths are provisional; nursing writes are emergency-nurse-only and administrator nursing access is read-only |
 
 Additional current routes include health/session helpers, admin roles/audit
 log/reports and fee management, visit status, reception dashboard/organizations,

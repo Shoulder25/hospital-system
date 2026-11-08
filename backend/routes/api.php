@@ -22,6 +22,10 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/billing/dashboard' => ['GET'],
         '/api/billing/patients' => ['GET'],
         '/api/emergency/queue' => ['GET'],
+        '/api/emergency/doctor/dashboard' => ['GET'],
+        '/api/emergency/doctor/queue' => ['GET'],
+        '/api/emergency/nurse/dashboard' => ['GET'],
+        '/api/emergency/nurse/queue' => ['GET'],
         '/api/reception/dashboard' => ['GET'],
         '/api/reception/appointments' => ['GET', 'POST'],
         '/api/reception/arrivals' => ['GET'],
@@ -41,6 +45,8 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/nursing/nurses' => ['GET'],
         '/api/doctor/dashboard' => ['GET'],
         '/api/doctor/queue' => ['GET'],
+        '/api/doctor/history' => ['GET'],
+        '/api/doctor/referrals' => ['GET'],
         '/api/consultations' => ['POST'],
         '/api/diagnoses' => ['POST'],
         '/api/prescriptions' => ['POST'],
@@ -78,6 +84,10 @@ function dispatchApiRequest(string $method, string $path): void
     $pharmacyPaymentId = null;
     $emergencyVisitId = null;
     $emergencyAction = null;
+    $emergencyNurseVisitId = null;
+    $emergencyNurseAction = null;
+    $emergencyDoctorVisitId = null;
+    $emergencyDoctorAction = null;
     $receptionAppointmentId = null;
     $receptionAppointmentAction = null;
 
@@ -222,13 +232,31 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = ['GET'];
     }
     if (preg_match(
-        '#^/api/emergency/visits/([0-9]+)(?:/(encounter|nurses|prescription|finish))?$#',
+        '#^/api/emergency/visits/([0-9]+)(?:/(encounter|nurses|prescription|finish|accept))?$#',
         $path,
         $matches
     )) {
         $emergencyVisitId = $matches[1];
         $emergencyAction = $matches[2] ?? '';
         $routes[$path] = $emergencyAction === '' ? ['GET'] : ['POST'];
+    }
+    if (preg_match(
+        '#^/api/emergency/nurse/visits/([0-9]+)(?:/(acknowledge|assessment|observations|handover))?$#',
+        $path,
+        $matches
+    )) {
+        $emergencyNurseVisitId = $matches[1];
+        $emergencyNurseAction = $matches[2] ?? '';
+        $routes[$path] = $emergencyNurseAction === '' ? ['GET'] : ['POST'];
+    }
+    if (preg_match(
+        '#^/api/emergency/doctor/visits/([0-9]+)(?:/(assessment|diagnosis|treatment|orders|referrals|outcome))?$#',
+        $path,
+        $matches
+    )) {
+        $emergencyDoctorVisitId = $matches[1];
+        $emergencyDoctorAction = $matches[2] ?? '';
+        $routes[$path] = $emergencyDoctorAction === '' ? ['GET'] : ['POST'];
     }
 
     if (!isset($routes[$path])) {
@@ -302,6 +330,8 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/nursing/nurses' => 'handleNursingNursesGet',
         '/api/doctor/dashboard' => 'handleDoctorDashboard',
         '/api/doctor/queue' => 'handleDoctorQueue',
+        '/api/doctor/history' => 'handleDoctorHistoryGet',
+        '/api/doctor/referrals' => 'handleDoctorReferralsGet',
         '/api/consultations' => 'handleDoctorConsultationCreate',
         '/api/diagnoses' => 'handleDoctorDiagnosisCreate',
         '/api/prescriptions' => 'handleDoctorPrescriptionCreate',
@@ -419,7 +449,9 @@ function dispatchApiRequest(string $method, string $path): void
         } elseif ($billingPaymentId !== null) {
             handleBillingReceiptGet($billingPaymentId);
         } elseif ($emergencyVisitId !== null) {
-            if ($emergencyAction === 'encounter') {
+            if ($emergencyAction === 'accept') {
+                handleEmergencyHandoverAccept($emergencyVisitId);
+            } elseif ($emergencyAction === 'encounter') {
                 handleEmergencyEncounterCreate($emergencyVisitId);
             } elseif ($emergencyAction === 'nurses') {
                 handleEmergencyNurseAssign($emergencyVisitId);
@@ -460,6 +492,52 @@ function dispatchApiRequest(string $method, string $path): void
                 ], 422);
             }
             handleEmergencyQueueGet($search);
+        } elseif ($path === '/api/emergency/nurse/dashboard') {
+            handleEmergencyNurseDashboard();
+        } elseif ($path === '/api/emergency/doctor/dashboard') {
+            handleEmergencyDoctorDashboard();
+        } elseif ($path === '/api/emergency/doctor/queue') {
+            $section = $_GET['section'] ?? 'queue';
+            $search = $_GET['search'] ?? '';
+            if (!is_string($section) || !is_string($search)) {
+                jsonError('Emergency activity filters must be text.', [], 422);
+            }
+            handleEmergencyDoctorQueueGet($section, $search);
+        } elseif ($emergencyDoctorVisitId !== null) {
+            if ($emergencyDoctorAction === 'assessment') {
+                handleEmergencyDoctorAssessmentSave($emergencyDoctorVisitId);
+            } elseif ($emergencyDoctorAction === 'diagnosis') {
+                handleEmergencyDoctorDiagnosisSave($emergencyDoctorVisitId);
+            } elseif ($emergencyDoctorAction === 'treatment') {
+                handleEmergencyDoctorTreatmentSave($emergencyDoctorVisitId);
+            } elseif ($emergencyDoctorAction === 'orders') {
+                handleEmergencyDoctorOrdersCreate($emergencyDoctorVisitId);
+            } elseif ($emergencyDoctorAction === 'referrals') {
+                handleEmergencyDoctorReferralCreate($emergencyDoctorVisitId);
+            } elseif ($emergencyDoctorAction === 'outcome') {
+                handleEmergencyDoctorOutcomeSave($emergencyDoctorVisitId);
+            } else {
+                handleEmergencyVisitGet($emergencyDoctorVisitId);
+            }
+        } elseif ($path === '/api/emergency/nurse/queue') {
+            $section = $_GET['section'] ?? 'incoming';
+            $search = $_GET['search'] ?? '';
+            if (!is_string($section) || !is_string($search)) {
+                jsonError('Emergency activity filters must be text.', [], 422);
+            }
+            handleEmergencyNurseQueue($section, $search);
+        } elseif ($emergencyNurseVisitId !== null) {
+            if ($emergencyNurseAction === 'acknowledge') {
+                handleEmergencyNurseAcknowledge($emergencyNurseVisitId);
+            } elseif ($emergencyNurseAction === 'assessment') {
+                handleEmergencyNurseAssessmentSave($emergencyNurseVisitId);
+            } elseif ($emergencyNurseAction === 'observations') {
+                handleEmergencyNurseObservationCreate($emergencyNurseVisitId);
+            } elseif ($emergencyNurseAction === 'handover') {
+                handleEmergencyNurseHandover($emergencyNurseVisitId);
+            } else {
+                handleEmergencyNurseVisitGet($emergencyNurseVisitId);
+            }
         } elseif ($pharmacyVisitId !== null) {
             if ($pharmacyAction === 'prescription') {
                 handlePharmacyPrescriptionSelect($pharmacyVisitId);
@@ -546,6 +624,14 @@ function dispatchApiRequest(string $method, string $path): void
                 ], 422);
             }
             handleDoctorQueue($search);
+        } elseif (in_array($path, ['/api/doctor/history', '/api/doctor/referrals'], true)) {
+            $search = $_GET['search'] ?? '';
+            if (!is_string($search)) {
+                jsonError('Search text must be a string.', [
+                    'search' => 'Enter plain text to search.',
+                ], 422);
+            }
+            $handlers[$path]($search);
         } elseif ($path === '/api/nursing/queue') {
             $search = $_GET['search'] ?? '';
             $filter = $_GET['filter'] ?? 'all';

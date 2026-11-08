@@ -151,28 +151,118 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE TABLE IF NOT EXISTS emergency_encounters (
     emergency_encounter_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     visit_id INT UNSIGNED NOT NULL,
-    emergency_doctor_id INT UNSIGNED NOT NULL,
+    emergency_doctor_id INT UNSIGNED NULL,
     triage_level VARCHAR(40) NULL,
     stabilization_notes TEXT NULL,
+    handover_status ENUM('not_requested', 'pending', 'accepted')
+        NOT NULL DEFAULT 'not_requested',
+    handover_requested_at DATETIME NULL,
+    handover_accepted_at DATETIME NULL,
+    outcome ENUM('observation', 'admission', 'transfer', 'discharge') NULL,
+    outcome_notes TEXT NULL,
+    outcome_recorded_at DATETIME NULL,
+    outcome_recorded_by_user_id INT UNSIGNED NULL,
     started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     ended_at DATETIME NULL,
     PRIMARY KEY (emergency_encounter_id),
     UNIQUE KEY uq_emergency_encounters_visit (visit_id),
     KEY idx_emergency_encounters_doctor (emergency_doctor_id),
+    KEY idx_emergency_encounters_outcome (outcome),
     CONSTRAINT fk_emergency_encounters_visit
         FOREIGN KEY (visit_id) REFERENCES visits (visit_id),
     CONSTRAINT fk_emergency_encounters_doctor
         FOREIGN KEY (emergency_doctor_id) REFERENCES users (user_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_emergency_encounters_outcome_user
+        FOREIGN KEY (outcome_recorded_by_user_id) REFERENCES users (user_id)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS emergency_nurses (
     emergency_encounter_id INT UNSIGNED NOT NULL,
     nurse_user_id INT UNSIGNED NOT NULL,
+    assigned_at DATETIME NULL DEFAULT NULL,
     PRIMARY KEY (emergency_encounter_id, nurse_user_id),
+    KEY idx_emergency_nurses_assignment_time
+        (emergency_encounter_id, assigned_at),
     CONSTRAINT fk_emergency_nurses_encounter
         FOREIGN KEY (emergency_encounter_id)
         REFERENCES emergency_encounters (emergency_encounter_id),
     CONSTRAINT fk_emergency_nurses_user
+        FOREIGN KEY (nurse_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS emergency_doctor_notes (
+    emergency_doctor_note_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    emergency_encounter_id INT UNSIGNED NOT NULL,
+    doctor_user_id INT UNSIGNED NOT NULL,
+    note_type ENUM('treatment', 'instruction') NOT NULL,
+    note_text TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (emergency_doctor_note_id),
+    KEY idx_emergency_doctor_notes_encounter
+        (emergency_encounter_id, created_at),
+    CONSTRAINT fk_emergency_doctor_notes_encounter
+        FOREIGN KEY (emergency_encounter_id)
+        REFERENCES emergency_encounters (emergency_encounter_id),
+    CONSTRAINT fk_emergency_doctor_notes_doctor
+        FOREIGN KEY (doctor_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS emergency_nursing_assessments (
+    emergency_nursing_assessment_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    emergency_encounter_id INT UNSIGNED NOT NULL,
+    nurse_user_id INT UNSIGNED NOT NULL,
+    symptoms TEXT NULL,
+    blood_pressure VARCHAR(40) NULL,
+    pulse VARCHAR(40) NULL,
+    respiratory_rate VARCHAR(40) NULL,
+    temperature VARCHAR(40) NULL,
+    oxygen_saturation VARCHAR(40) NULL,
+    consciousness_level VARCHAR(100) NULL,
+    pain_score VARCHAR(40) NULL,
+    allergies TEXT NULL,
+    visible_injuries TEXT NULL,
+    triage_priority VARCHAR(100) NULL,
+    nursing_notes TEXT NULL,
+    immediate_care TEXT NULL,
+    status ENUM('draft', 'complete') NOT NULL DEFAULT 'draft',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    completed_at DATETIME NULL,
+    PRIMARY KEY (emergency_nursing_assessment_id),
+    UNIQUE KEY uq_emergency_nursing_assessment_encounter (emergency_encounter_id),
+    KEY idx_emergency_nursing_assessment_nurse (nurse_user_id),
+    CONSTRAINT fk_emergency_nursing_assessment_encounter
+        FOREIGN KEY (emergency_encounter_id)
+        REFERENCES emergency_encounters (emergency_encounter_id),
+    CONSTRAINT fk_emergency_nursing_assessment_nurse
+        FOREIGN KEY (nurse_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS emergency_nursing_observations (
+    emergency_nursing_observation_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    emergency_encounter_id INT UNSIGNED NOT NULL,
+    nurse_user_id INT UNSIGNED NOT NULL,
+    blood_pressure VARCHAR(40) NULL,
+    pulse VARCHAR(40) NULL,
+    respiratory_rate VARCHAR(40) NULL,
+    temperature VARCHAR(40) NULL,
+    oxygen_saturation VARCHAR(40) NULL,
+    consciousness_level VARCHAR(100) NULL,
+    pain_score VARCHAR(40) NULL,
+    nursing_notes TEXT NULL,
+    immediate_care TEXT NULL,
+    recorded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (emergency_nursing_observation_id),
+    KEY idx_emergency_nursing_observations_encounter
+        (emergency_encounter_id, recorded_at),
+    KEY idx_emergency_nursing_observations_nurse (nurse_user_id),
+    CONSTRAINT fk_emergency_nursing_observations_encounter
+        FOREIGN KEY (emergency_encounter_id)
+        REFERENCES emergency_encounters (emergency_encounter_id),
+    CONSTRAINT fk_emergency_nursing_observations_nurse
         FOREIGN KEY (nurse_user_id) REFERENCES users (user_id)
 ) ENGINE=InnoDB;
 
@@ -321,6 +411,8 @@ CREATE TABLE IF NOT EXISTS diagnoses (
     consultation_id INT UNSIGNED NOT NULL,
     diagnosed_by_user_id INT UNSIGNED NOT NULL,
     diagnosis_made TINYINT(1) NOT NULL DEFAULT 1,
+    diagnosis_stage ENUM('preliminary', 'final')
+        NOT NULL DEFAULT 'final',
     diagnosis_description TEXT NULL,
     clinical_findings TEXT NULL,
     treatment_plan TEXT NULL,

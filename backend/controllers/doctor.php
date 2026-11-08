@@ -101,6 +101,14 @@ function handleDoctorDashboard(): void
                AND c.next_step <> 'undecided'
                AND c.consulted_at >= CURDATE()
                AND c.consulted_at < CURDATE() + INTERVAL 1 DAY) AS consultations_today,
+                        (SELECT COUNT(*)
+                         FROM consultations c
+                         WHERE c.consultation_type = 'general'
+                             AND c.next_step = 'undecided') AS consultations_in_progress,
+                        (SELECT COUNT(*)
+                         FROM consultations c
+                         WHERE c.consultation_type = 'general'
+                             AND c.next_step <> 'undecided') AS completed_consultations,
             (SELECT COUNT(DISTINCT v.visit_id)
              FROM visits v
              WHERE v.status = 'awaiting_tests'
@@ -133,6 +141,12 @@ function handleDoctorDashboard(): void
                 AS further_investigations,
             (SELECT COUNT(*) FROM specialist_referrals
              WHERE status = 'pending') AS specialist_referrals,
+                ((SELECT COUNT(*) FROM specialist_referrals
+                  WHERE status = 'pending')
+                 + (SELECT COUNT(*) FROM therapy_referrals
+                     WHERE status IN ('referred', 'in_progress'))
+                 + (SELECT COUNT(*) FROM outside_referrals
+                     WHERE status IN ('issued', 'sent'))) AS pending_referrals,
             (SELECT COUNT(DISTINCT visit_id) FROM diagnoses
              WHERE diagnosis_made = 1) AS patients_with_diagnosis"
     );
@@ -156,13 +170,35 @@ function handleDoctorDashboard(): void
     );
     $specialistStatement->execute();
 
+        $activityStatement = $database->query(
+                'SELECT consultation.consultation_id, consultation.visit_id,
+                                consultation.consulted_at, consultation.presenting_complaint,
+                                consultation.next_step, visit.status AS visit_status,
+                                patient.patient_number, patient.first_name, patient.last_name,
+                                (SELECT diagnosis.diagnosis_description
+                                 FROM diagnoses diagnosis
+                                 WHERE diagnosis.consultation_id = consultation.consultation_id
+                                 ORDER BY diagnosis.diagnosis_id DESC LIMIT 1
+                                ) AS diagnosis_description
+                 FROM consultations consultation
+                 INNER JOIN visits visit ON visit.visit_id = consultation.visit_id
+                 INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+                 WHERE consultation.consultation_type = \'general\'
+                     AND consultation.next_step <> \'undecided\'
+                 ORDER BY consultation.consulted_at DESC, consultation.consultation_id DESC
+                 LIMIT 10'
+        );
+
     jsonSuccess('Doctor dashboard loaded.', [
         'stats' => [
             'awaiting_consultation' => (int) $stats['awaiting_consultation'],
             'consultations_today' => (int) $stats['consultations_today'],
+            'consultations_in_progress' => (int) $stats['consultations_in_progress'],
+            'completed_consultations' => (int) $stats['completed_consultations'],
             'awaiting_test_results' => (int) $stats['awaiting_test_results'],
             'further_investigations' => (int) $stats['further_investigations'],
             'specialist_referrals' => (int) $stats['specialist_referrals'],
+            'pending_referrals' => (int) $stats['pending_referrals'],
             'patients_with_diagnosis' => (int) $stats['patients_with_diagnosis'],
         ],
         'medicines' => array_map(static function (array $medicine): array {
@@ -178,6 +214,22 @@ function handleDoctorDashboard(): void
                 'role_name' => $specialist['role_name'],
             ];
         }, $specialistStatement->fetchAll()),
+        'recent_activity' => array_map(static function (array $activity): array {
+            return [
+                'consultation_id' => (int) $activity['consultation_id'],
+                'visit_id' => (int) $activity['visit_id'],
+                'patient_number' => $activity['patient_number'],
+                'patient_name' => trim(
+                    (string) $activity['first_name'] . ' '
+                    . (string) $activity['last_name']
+                ),
+                'updated_at' => $activity['consulted_at'],
+                'presenting_complaint' => $activity['presenting_complaint'],
+                'diagnosis' => $activity['diagnosis_description'],
+                'next_step' => $activity['next_step'],
+                'visit_status' => $activity['visit_status'],
+            ];
+        }, $activityStatement->fetchAll()),
     ]);
 }
 
@@ -208,7 +260,27 @@ function handleDoctorQueue(string $search): void
                     INNER JOIN test_results tr ON tr.test_order_id = t.test_order_id
                     WHERE t.visit_id = v.visit_id
                       AND tr.status IN ('final', 'amended')
-                ) AS has_results
+                     ) AS has_results,
+                     (SELECT CONCAT_WS(' · ', NULLIF(nursing.complaint, ''),
+                                             NULLIF(nursing.symptoms, ''),
+                                             NULLIF(nursing.notes, ''))
+                      FROM nurse_assessments nursing
+                      WHERE nursing.visit_id = v.visit_id
+                      ORDER BY nursing.assessed_at DESC, nursing.assessment_id DESC
+                      LIMIT 1
+                     ) AS nursing_reason,
+                     (SELECT GROUP_CONCAT(
+                          CONCAT(test_order.test_type, ': ',
+                                    COALESCE(test_result.result_text, test_result.result_notes))
+                          ORDER BY test_order.ordered_at, test_order.test_order_id
+                          SEPARATOR ' | '
+                      )
+                      FROM test_orders test_order
+                      INNER JOIN test_results test_result
+                          ON test_result.test_order_id = test_order.test_order_id
+                      WHERE test_order.visit_id = v.visit_id
+                         AND test_result.status IN ('final', 'amended')
+                     ) AS final_test_summary
          FROM visits v
          INNER JOIN patients p ON p.patient_id = v.patient_id
          WHERE $eligible
@@ -243,6 +315,8 @@ function handleDoctorQueue(string $search): void
             'is_emergency' => (bool) $visit['is_emergency'],
             'has_assessment' => (bool) $visit['has_assessment'],
             'has_results' => (bool) $visit['has_results'],
+            'nursing_reason' => $visit['nursing_reason'],
+            'final_test_summary' => $visit['final_test_summary'],
         ];
     }, $statement->fetchAll());
 
@@ -298,7 +372,6 @@ function handleDoctorVisitGet(string $visitId): void
 
     $database = getDatabaseConnection();
     $user = requireDoctorAccess($database);
-    $eligible = doctorReadyTestVisitSql();
     $visitStatement = $database->prepare(
         "SELECT v.visit_id, v.patient_id, v.arrived_at, v.visit_source,
                 v.source_notes, v.status, v.is_emergency,
@@ -307,9 +380,7 @@ function handleDoctorVisitGet(string $visitId): void
                 p.phone, p.address
          FROM visits v
          INNER JOIN patients p ON p.patient_id = v.patient_id
-         WHERE v.visit_id = :visit_id
-           AND $eligible
-           AND v.medication_collection_only = 0
+                 WHERE v.visit_id = :visit_id
          LIMIT 1"
     );
     $visitStatement->execute(['visit_id' => (int) $visitId]);
@@ -435,6 +506,120 @@ function handleDoctorVisitGet(string $visitId): void
         ];
     }, $diagnosisStatement->fetchAll());
 
+    $prescriptionStatement = $database->prepare(
+        'SELECT prescription.prescription_id, prescription.status,
+                prescription.created_at, prescriber.display_name AS prescribed_by
+         FROM prescriptions prescription
+         INNER JOIN users prescriber
+            ON prescriber.user_id = prescription.prescribed_by_user_id
+         WHERE prescription.visit_id = :visit_id
+         ORDER BY prescription.created_at DESC, prescription.prescription_id DESC'
+    );
+    $prescriptionStatement->execute(['visit_id' => (int) $visitId]);
+    $prescriptionItemsStatement = $database->prepare(
+        'SELECT item.prescription_item_id, item.dosage, item.frequency,
+                item.duration, item.quantity, item.instructions,
+                medicine.medicine_name, medicine.unit_price
+         FROM prescription_items item
+         INNER JOIN medicines medicine ON medicine.medicine_id = item.medicine_id
+         WHERE item.prescription_id = :prescription_id
+         ORDER BY item.prescription_item_id'
+    );
+    $prescriptions = [];
+    foreach ($prescriptionStatement->fetchAll() as $prescription) {
+        $prescriptionItemsStatement->execute([
+            'prescription_id' => (int) $prescription['prescription_id'],
+        ]);
+        $prescriptions[] = [
+            'prescription_id' => (int) $prescription['prescription_id'],
+            'status' => $prescription['status'],
+            'created_at' => $prescription['created_at'],
+            'prescribed_by' => $prescription['prescribed_by'],
+            'items' => array_map(static function (array $item): array {
+                return [
+                    'medicine_name' => $item['medicine_name'],
+                    'dosage' => $item['dosage'],
+                    'frequency' => $item['frequency'],
+                    'duration' => $item['duration'],
+                    'quantity' => (string) $item['quantity'],
+                    'instructions' => $item['instructions'],
+                    'unit_price' => (string) $item['unit_price'],
+                ];
+            }, $prescriptionItemsStatement->fetchAll()),
+        ];
+    }
+
+    $medicationHistoryStatement = $database->prepare(
+        'SELECT visit.visit_id, visit.arrived_at,
+                prescription.prescription_id, prescription.status,
+                prescription_item.dosage, prescription_item.frequency,
+                prescription_item.duration, prescription_item.quantity,
+                prescription_item.instructions, medicine.medicine_name,
+                dispensing.dispensed_at
+         FROM visits visit
+         INNER JOIN prescriptions prescription ON prescription.visit_id = visit.visit_id
+         INNER JOIN prescription_items prescription_item
+            ON prescription_item.prescription_id = prescription.prescription_id
+         INNER JOIN medicines medicine ON medicine.medicine_id = prescription_item.medicine_id
+         LEFT JOIN dispensings dispensing ON dispensing.prescription_id = prescription.prescription_id
+         WHERE visit.patient_id = :patient_id
+         ORDER BY visit.arrived_at DESC, prescription.prescription_id DESC,
+                  prescription_item.prescription_item_id'
+    );
+    $medicationHistoryStatement->execute(['patient_id' => (int) $visit['patient_id']]);
+    $medicationHistory = array_map(static function (array $item): array {
+        return [
+            'visit_id' => (int) $item['visit_id'],
+            'arrived_at' => $item['arrived_at'],
+            'prescription_id' => (int) $item['prescription_id'],
+            'status' => $item['status'],
+            'medicine_name' => $item['medicine_name'],
+            'dosage' => $item['dosage'],
+            'frequency' => $item['frequency'],
+            'duration' => $item['duration'],
+            'quantity' => (string) $item['quantity'],
+            'instructions' => $item['instructions'],
+            'dispensed_at' => $item['dispensed_at'],
+        ];
+    }, $medicationHistoryStatement->fetchAll());
+
+    $referrals = [];
+    $specialistReferrals = $database->prepare(
+        'SELECT referral.specialist_referral_id AS referral_id,
+                referral.reason, referral.clinical_summary AS details,
+                referral.status, referral.created_at,
+                specialist.display_name AS destination
+         FROM specialist_referrals referral
+         INNER JOIN users specialist ON specialist.user_id = referral.specialist_user_id
+         WHERE referral.visit_id = :visit_id'
+    );
+    $specialistReferrals->execute(['visit_id' => (int) $visitId]);
+    foreach ($specialistReferrals->fetchAll() as $referral) {
+        $referrals[] = ['type' => 'specialist'] + $referral;
+    }
+    $therapyReferrals = $database->prepare(
+        'SELECT therapy_referral_id AS referral_id, therapy_type AS destination,
+                reason, status, created_at
+         FROM therapy_referrals WHERE visit_id = :visit_id'
+    );
+    $therapyReferrals->execute(['visit_id' => (int) $visitId]);
+    foreach ($therapyReferrals->fetchAll() as $referral) {
+        $referrals[] = ['type' => 'therapy', 'details' => null] + $referral;
+    }
+    $outsideReferrals = $database->prepare(
+        'SELECT outside_referral_id AS referral_id,
+                COALESCE(provider_name, \'Outside provider\') AS destination,
+                clinical_summary AS details, status, created_at
+         FROM outside_referrals WHERE visit_id = :visit_id'
+    );
+    $outsideReferrals->execute(['visit_id' => (int) $visitId]);
+    foreach ($outsideReferrals->fetchAll() as $referral) {
+        $referrals[] = [
+            'type' => 'outside',
+            'reason' => null,
+        ] + $referral;
+    }
+
     $history = doctorPatientHistory(
         $database,
         (int) $visit['patient_id'],
@@ -465,11 +650,15 @@ function handleDoctorVisitGet(string $visitId): void
             'source_notes' => $visit['source_notes'],
             'status' => $visit['status'],
             'is_emergency' => (bool) $visit['is_emergency'],
+            'medication_collection_only' => (bool) $visit['medication_collection_only'],
         ],
         'nursing_assessment' => $assessment,
         'test_results' => $testResults,
         'consultations' => $consultations,
         'diagnoses' => $diagnoses,
+        'prescriptions' => $prescriptions,
+        'medication_history' => $medicationHistory,
+        'referrals' => $referrals,
         'history' => $history,
     ]);
 }
@@ -493,6 +682,198 @@ function handleDoctorVisitHistory(string $visitId): void
 
     jsonSuccess('Patient visit history loaded.', [
         'history' => doctorPatientHistory($database, (int) $patientId, (int) $visitId),
+    ]);
+}
+
+function handleDoctorHistoryGet(string $search): void
+{
+    $database = getDatabaseConnection();
+    $user = requireDoctorAccess($database);
+    $search = trim($search);
+    if (strlen($search) > 100) {
+        jsonError('Search text must be 100 characters or fewer.', [
+            'search' => 'Shorten the search text.',
+        ], 422);
+    }
+
+    $pattern = '%' . $search . '%';
+    $statement = $database->prepare(
+        'SELECT consultation.consultation_id, consultation.visit_id,
+                consultation.consultation_type, consultation.presenting_complaint,
+                consultation.clinical_observations, consultation.examination_findings,
+                consultation.notes, consultation.diagnosis_made,
+                consultation.diagnosis_text, consultation.treatment_plan,
+                consultation.next_step, consultation.consulted_at,
+                visit.patient_id, visit.arrived_at, visit.visit_source,
+                visit.status AS visit_status, patient.patient_number,
+                patient.first_name, patient.last_name,
+                clinician.display_name AS clinician_name,
+                (SELECT diagnosis.diagnosis_description
+                 FROM diagnoses diagnosis
+                 WHERE diagnosis.consultation_id = consultation.consultation_id
+                 ORDER BY diagnosis.diagnosis_id DESC LIMIT 1
+                ) AS diagnosis_description
+         FROM consultations consultation
+         INNER JOIN visits visit ON visit.visit_id = consultation.visit_id
+         INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+         INNER JOIN users clinician ON clinician.user_id = consultation.clinician_user_id
+         WHERE consultation.consultation_type = \'general\'
+           AND consultation.next_step <> \'undecided\'
+           AND (
+                :search_empty = \'\'
+                OR patient.patient_number LIKE :patient_number
+                OR patient.first_name LIKE :first_name
+                OR patient.last_name LIKE :last_name
+                OR CONCAT_WS(\' \', patient.first_name, patient.last_name) LIKE :full_name
+                OR CAST(visit.visit_id AS CHAR) LIKE :visit_id
+           )
+         ORDER BY consultation.consulted_at DESC, consultation.consultation_id DESC
+         LIMIT 250'
+    );
+    $statement->execute([
+        'search_empty' => $search,
+        'patient_number' => $pattern,
+        'first_name' => $pattern,
+        'last_name' => $pattern,
+        'full_name' => $pattern,
+        'visit_id' => $pattern,
+    ]);
+    $records = $statement->fetchAll();
+    foreach ($records as $record) {
+        recordDoctorAudit(
+            $database,
+            (int) $user['user_id'],
+            'doctor.history.viewed',
+            (int) $record['patient_id'],
+            (int) $record['visit_id']
+        );
+    }
+
+    jsonSuccess('Completed doctor consultations loaded.', [
+        'consultations' => array_map(static function (array $record): array {
+            return [
+                'consultation_id' => (int) $record['consultation_id'],
+                'visit_id' => (int) $record['visit_id'],
+                'patient_number' => $record['patient_number'],
+                'patient_name' => trim(
+                    (string) $record['first_name'] . ' ' . (string) $record['last_name']
+                ),
+                'arrived_at' => $record['arrived_at'],
+                'visit_source' => $record['visit_source'],
+                'visit_status' => $record['visit_status'],
+                'clinician_name' => $record['clinician_name'],
+                'consulted_at' => $record['consulted_at'],
+                'presenting_complaint' => $record['presenting_complaint'],
+                'clinical_observations' => $record['clinical_observations'],
+                'examination_findings' => $record['examination_findings'],
+                'consultation_notes' => $record['notes'],
+                'diagnosis_made' => (bool) $record['diagnosis_made'],
+                'diagnosis' => $record['diagnosis_description'] ?? $record['diagnosis_text'],
+                'treatment_plan' => $record['treatment_plan'],
+                'next_step' => $record['next_step'],
+            ];
+        }, $records),
+    ]);
+}
+
+function handleDoctorReferralsGet(string $search): void
+{
+    $database = getDatabaseConnection();
+    $user = requireDoctorAccess($database);
+    $search = trim($search);
+    if (strlen($search) > 100) {
+        jsonError('Search text must be 100 characters or fewer.', [
+            'search' => 'Shorten the search text.',
+        ], 422);
+    }
+
+    $pattern = '%' . $search . '%';
+    $statement = $database->prepare(
+        'SELECT * FROM (
+            SELECT \'specialist\' AS referral_type,
+                   referral.specialist_referral_id AS referral_id,
+                   referral.visit_id, referral.created_at,
+                   referral.reason, referral.clinical_summary AS details,
+                   referral.status, specialist.display_name AS destination,
+                   visit.patient_id, visit.status AS visit_status,
+                   patient.patient_number, patient.first_name, patient.last_name
+            FROM specialist_referrals referral
+            INNER JOIN visits visit ON visit.visit_id = referral.visit_id
+            INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+            INNER JOIN users specialist ON specialist.user_id = referral.specialist_user_id
+            UNION ALL
+            SELECT \'therapy\' AS referral_type,
+                   therapy.therapy_referral_id AS referral_id,
+                   therapy.visit_id, therapy.created_at, therapy.reason,
+                   therapy.therapy_type AS details, therapy.status,
+                   therapy.therapy_type AS destination,
+                   visit.patient_id, visit.status AS visit_status,
+                   patient.patient_number, patient.first_name, patient.last_name
+            FROM therapy_referrals therapy
+            INNER JOIN visits visit ON visit.visit_id = therapy.visit_id
+            INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+            UNION ALL
+            SELECT \'outside\' AS referral_type,
+                   outside_referral.outside_referral_id AS referral_id,
+                   outside_referral.visit_id, outside_referral.created_at,
+                   NULL AS reason, outside_referral.clinical_summary AS details,
+                   outside_referral.status,
+                   COALESCE(outside_referral.provider_name, \'Outside provider\') AS destination,
+                   visit.patient_id, visit.status AS visit_status,
+                   patient.patient_number, patient.first_name, patient.last_name
+            FROM outside_referrals outside_referral
+            INNER JOIN visits visit ON visit.visit_id = outside_referral.visit_id
+            INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+         ) referral_activity
+         WHERE (
+                :search_empty = \'\'
+                OR referral_activity.patient_number LIKE :patient_number
+                OR referral_activity.first_name LIKE :first_name
+                OR referral_activity.last_name LIKE :last_name
+                OR CONCAT_WS(\' \', referral_activity.first_name,
+                             referral_activity.last_name) LIKE :full_name
+                OR CAST(referral_activity.visit_id AS CHAR) LIKE :visit_id
+         )
+         ORDER BY referral_activity.created_at DESC, referral_activity.referral_id DESC
+         LIMIT 250'
+    );
+    $statement->execute([
+        'search_empty' => $search,
+        'patient_number' => $pattern,
+        'first_name' => $pattern,
+        'last_name' => $pattern,
+        'full_name' => $pattern,
+        'visit_id' => $pattern,
+    ]);
+    $referrals = $statement->fetchAll();
+    foreach ($referrals as $referral) {
+        recordDoctorAudit(
+            $database,
+            (int) $user['user_id'],
+            'doctor.referrals.viewed:' . $referral['referral_type'],
+            (int) $referral['patient_id'],
+            (int) $referral['visit_id']
+        );
+    }
+
+    jsonSuccess('Doctor referrals loaded.', [
+        'referrals' => array_map(static function (array $referral): array {
+            return [
+                'referral_type' => $referral['referral_type'],
+                'referral_id' => (int) $referral['referral_id'],
+                'visit_id' => (int) $referral['visit_id'],
+                'patient_number' => $referral['patient_number'],
+                'patient_name' => trim(
+                    (string) $referral['first_name'] . ' ' . (string) $referral['last_name']
+                ),
+                'visit_status' => $referral['visit_status'],
+                'created_at' => $referral['created_at'],
+                'reason' => $referral['reason'],
+                'details' => $referral['details'],
+                'destination' => $referral['destination'],
+                'status' => $referral['status'],
+            ];
+        }, $referrals),
     ]);
 }
 

@@ -1,0 +1,6 @@
+<div class="doctor-record-grid"><section class="doctor-record-card"><h3>Patient and visit</h3><dl class="doctor-details" data-patient-details></dl></section><section class="doctor-record-card"><h3>Nursing assessment</h3><dl class="doctor-details" data-nursing-details></dl></section></div>
+<section class="doctor-record-card doctor-wide-card"><h3>Tests and results</h3><div class="doctor-result-list" data-test-results></div></section>
+<section class="doctor-record-card doctor-wide-card"><h3>Consultations and diagnoses for this visit</h3><div class="doctor-history-list" data-current-clinical-records></div></section>
+<section class="doctor-record-card doctor-wide-card"><h3>Prescriptions and medication history</h3><div class="doctor-history-list" data-prescriptions></div></section>
+<section class="doctor-record-card doctor-wide-card"><h3>Specialist and therapy referrals</h3><div class="doctor-history-list" data-visit-referrals></div></section>
+<section class="doctor-record-card doctor-wide-card"><h3>Previous visits and diagnoses</h3><div class="doctor-history-list" data-visit-history></div></section>

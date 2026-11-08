@@ -2,11 +2,11 @@
 
 This fictional-data script describes the expected click flow and the status
 values currently stored by the application. It is not evidence that the
-scenarios passed. On 2026-11-07, all 50 PHP files passed `php -l`; the local
-health endpoint returned HTTP 200 with the database connected. The nine UI
-scenarios were not run because this database lacks accounts for many required
-roles and their passwords are not available. S8 is additionally blocked by the
-missing emergency page/API. Do not describe the scenarios as tested.
+scenarios passed. On 2026-11-07, the then-existing PHP files passed `php -l` and
+the local health endpoint returned HTTP 200. The UI scenarios were not run
+because demo accounts and passwords for the required roles were unavailable.
+The Emergency Nurse workflow was implemented on 2026-11-08 but still requires
+the migration and an authenticated workflow test; do not describe it as passed.
 
 For normal walk-in, school-appointment, and referral arrivals, Reception now
 opens the ticket-payment panel immediately after visit creation. The existing
@@ -28,8 +28,8 @@ Cashier queue remains available as an alternative payment point.
 
 ### Suggested usernames to create
 
-These are usernames only, not credentials. The emergency roles may appear in
-the role list, but accounts alone cannot enable the missing emergency module.
+These are usernames only, not credentials. Apply the emergency nursing
+migration before testing the Emergency Nurse workflow.
 
 | Role | Username |
 |---|---|
@@ -175,14 +175,25 @@ Path: `awaiting_ticket_payment` → `awaiting_nurse` → `awaiting_doctor` →
 
 ### S8 — Emergency temporary patient and deferred payment
 
-**Blocked:** no emergency department UI/API is implemented. Reception can
-create a temporary patient and emergency visit with initial status
-`emergency_in_progress`, but there is no emergency-care page or API to record
-emergency doctor/nurse care, charges, and routing. No end-to-end click path or
-final status can honestly be claimed. Do not present this as passed.
+1. Apply `database/migrations/20261108_emergency_nursing.sql` if the database
+   was not freshly imported from `database/hosp.sql`.
+2. **Receptionist:** register a fictional patient and create an emergency visit.
+   Expect `emergency_in_progress` with no ticket-payment step.
+3. **Emergency Nurse:** open **Emergency Dashboard** → **Incoming Patients**,
+   acknowledge the new visit, save a draft, then reopen **Patient Assessment**
+   to resume it. Record observations and request doctor handover before
+   completing the assessment.
+4. **Emergency Doctor:** open the existing Emergency Department page, review
+   the nursing assessment/observations and accept the pending handover.
+5. **Emergency Nurse:** confirm the doctor's acceptance, record another
+   observation, complete the assessment, and review it in Emergency History.
+6. If separately testing existing doctor completion, finish the encounter and
+   verify its existing Pharmacy routing. Do not collect an emergency ticket
+   payment.
 
-Path currently possible: temporary patient → reception emergency visit →
-`emergency_in_progress` → **blocked: no emergency-care route**.
+Path: Reception → `emergency_in_progress` → nurse acknowledgement and draft →
+pending doctor handover → accepted handover and continued observations →
+emergency history. This scenario is implemented but not yet verified end to end.
 
 ### S9 — Medication collection only
 
@@ -210,9 +221,9 @@ Path: `awaiting_pharmacy` → `awaiting_pharmacy` (prescription selected/paid) �
 | S5 specialist diagnosed | FAIL — not run | No specialist or pharmacist demo account/password available; no authenticated UI workflow performed. |
 | S6 specialist undiagnosed | FAIL — not run | No specialist or pharmacist demo account/password available; no authenticated UI workflow performed. |
 | S7 therapy | FAIL — not run | No therapist or pharmacist demo account/password available; no authenticated UI workflow performed. |
-| S8 emergency | FAIL — blocked | Emergency page/API route is missing; reception can only start the visit. |
+| S8 emergency | FAIL — not run | Nurse pages, API, and doctor handover are implemented; migration and authenticated end-to-end workflow still require verification. |
 | S9 medication-only | FAIL — not run | No pharmacist demo account/password available; no authenticated UI workflow performed. |
 
-The local health check passed (HTTP 200, database connected); all 50 PHP files
-passed `php -l`. `/frontend/emergency/index.php` returns HTTP 404. These checks
-do not substitute for the UI scenarios.
+The 2026-11-07 health and syntax checks predate the Emergency Nurse changes and
+do not verify the current workflow. These checks do not substitute for the UI
+scenarios.

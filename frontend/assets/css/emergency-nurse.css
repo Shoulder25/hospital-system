@@ -1,0 +1,57 @@
+.emergency-nurse-content { gap: 20px; }
+.emergency-nurse-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.emergency-nurse-stat { display: grid; gap: 8px; min-height: 132px; padding: 18px; border: 1px solid #e5edef; border-radius: 11px; background: #fff; color: #64787d; text-decoration: none; box-shadow: 0 3px 14px rgb(31 66 73 / 2%); }
+.emergency-nurse-stat:hover { border-color: #b7d7d2; transform: translateY(-1px); }
+.emergency-nurse-stat span { font-size: 12px; font-weight: 700; }
+.emergency-nurse-stat strong { color: #176f68; font-size: 30px; line-height: 1; }
+.emergency-nurse-stat small { color: #839195; font-size: 11px; line-height: 1.5; }
+.emergency-nurse-panel { min-width: 0; }
+.emergency-nurse-activity-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 18px 20px; }
+.emergency-nurse-activity-links a { display: grid; gap: 6px; padding: 15px; border: 1px solid #e8eeee; border-radius: 8px; color: #526a70; text-decoration: none; }
+.emergency-nurse-activity-links a:hover { border-color: #a7c7c2; background: #f7fbfa; }
+.emergency-nurse-activity-links strong { color: #30494f; font-size: 12px; }
+.emergency-nurse-activity-links span { font-size: 11px; line-height: 1.5; }
+.emergency-nurse-panel .admin-panel-heading { align-items: flex-end; }
+.emergency-nurse-panel .emergency-search { display: grid; gap: 6px; color: #536a71; font-size: 11px; font-weight: 700; }
+.emergency-nurse-panel .emergency-search > span { display: flex; gap: 7px; }
+.emergency-nurse-panel .emergency-search input { min-width: 190px; }
+.emergency-nurse-assessment { display: grid; gap: 18px; }
+.emergency-nurse-assessment .admin-panel-heading { align-items: center; }
+.emergency-nurse-assessment .admin-panel-heading h2 { font-size: 18px; }
+.emergency-nurse-assessment .emergency-facts { padding: 0 20px; }
+.emergency-nurse-subsection { display: grid; gap: 12px; border-top: 1px solid #e8eef0; padding: 18px 20px 0; }
+.emergency-nurse-subsection h3 { margin: 0; color: #30494f; font-size: 15px; }
+.emergency-nurse-subsection > p { margin: 0; color: #647a83; font-size: 12px; line-height: 1.6; }
+.emergency-nurse-muted { color: #839195 !important; }
+.emergency-nurse-form { width: 100%; max-width: none; padding: 0 20px 18px; }
+.emergency-nurse-form fieldset { display: grid; min-width: 0; gap: 13px; margin: 0; padding: 16px; border: 1px solid #e4ebec; border-radius: 9px; }
+.emergency-nurse-form fieldset:disabled { opacity: .6; }
+.emergency-nurse-form legend { padding: 0 6px; color: #415a60; font-size: 12px; font-weight: 700; }
+.emergency-nurse-form label { color: #536a71; }
+.emergency-nurse-form label small { color: #839195; font-size: 10px; font-weight: 400; line-height: 1.5; }
+.emergency-nurse-form input, .emergency-nurse-form textarea { min-height: 39px; border: 1px solid #dbe5e6; border-radius: 7px; padding: 9px 10px; color: #30494f; background: #fff; font: inherit; font-size: 12px; }
+.emergency-nurse-form textarea { resize: vertical; }
+.emergency-nurse-form input:focus, .emergency-nurse-form textarea:focus { outline: 2px solid rgb(28 139 129 / 25%); border-color: #3b9c92; }
+.emergency-nurse-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.emergency-history-table { min-width: 650px; }
+.emergency-history-table td { white-space: normal; vertical-align: top; }
+.emergency-history-table td small { display: block; margin-top: 3px; color: #839195; }
+.emergency-status-pending { background: #fff3dc; color: #875b14; }
+.emergency-status-accepted { background: #e7f4ed; color: #347653; }
+.emergency-status-not_requested { background: #f0f3f4; color: #536a71; }
+.emergency-nurse-page [data-nurse-assessment][hidden] { display: none; }
+@media (max-width: 900px) {
+    .emergency-nurse-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 650px) {
+    .emergency-nurse-activity-links { grid-template-columns: 1fr; padding: 14px; }
+    .emergency-nurse-panel .admin-panel-heading { align-items: stretch; flex-direction: column; }
+    .emergency-nurse-panel .emergency-search input { min-width: 0; }
+    .emergency-nurse-assessment .emergency-facts { padding-right: 14px; padding-left: 14px; }
+    .emergency-nurse-subsection { padding-right: 14px; padding-left: 14px; }
+    .emergency-nurse-form { padding-right: 14px; padding-left: 14px; }
+}
+@media (max-width: 440px) {
+    .emergency-nurse-stat-grid { grid-template-columns: 1fr; }
+    .emergency-nurse-actions { display: grid; }
+}
