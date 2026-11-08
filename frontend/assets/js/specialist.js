@@ -208,6 +208,27 @@
             ...details.consultations,
             ...details.diagnoses,
         ]);
+        addRecordSection(content, 'Prescriptions and pharmacy status',
+            (details.prescriptions || []).flatMap((prescription) => [
+                {
+                    prescription_id: prescription.prescription_id,
+                    status: prescription.status,
+                    prescribed_by: prescription.prescribed_by,
+                    created_at: prescription.created_at,
+                    pharmacy_verified_by: prescription.verified_by,
+                    pharmacy_verified_at: prescription.pharmacy_verified_at,
+                    dispensed_at: prescription.dispensed_at,
+                    pharmacy_notes: prescription.dispensing_notes,
+                },
+                ...prescription.items.map((item) => ({
+                    medicine: item.medicine_name,
+                    dosage: item.dosage,
+                    frequency: item.frequency,
+                    duration: item.duration,
+                    quantity: item.quantity,
+                    instructions: item.instructions,
+                })),
+            ]));
         const therapyReports = (details.therapy_reports || []).flatMap((report) => [
             {
                 therapy_type: report.therapy_type,

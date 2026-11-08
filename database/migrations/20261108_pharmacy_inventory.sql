@@ -8,6 +8,18 @@ ALTER TABLE dispensings
     ADD COLUMN dispensing_notes TEXT NULL
         AFTER payment_id;
 
+ALTER TABLE prescriptions
+    ADD COLUMN pharmacy_verified_by_user_id INT UNSIGNED NULL
+        AFTER prescribed_by_user_id,
+    ADD COLUMN pharmacy_verified_at DATETIME NULL
+        AFTER pharmacy_verified_by_user_id,
+    ADD KEY idx_prescriptions_pharmacy_verification
+        (pharmacy_verified_at),
+    ADD CONSTRAINT fk_prescriptions_pharmacy_verifier
+        FOREIGN KEY (pharmacy_verified_by_user_id)
+        REFERENCES users (user_id)
+        ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS pharmacy_stock_movements (
     stock_movement_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     medicine_id INT UNSIGNED NOT NULL,
@@ -45,4 +57,19 @@ CREATE TABLE IF NOT EXISTS pharmacy_prescription_exceptions (
         REFERENCES prescription_items (prescription_item_id),
     CONSTRAINT fk_pharmacy_exception_user
         FOREIGN KEY (recorded_by_user_id) REFERENCES users (user_id)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS pharmacy_prescription_actions (
+    prescription_action_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    prescription_id INT UNSIGNED NOT NULL,
+    acted_by_user_id INT UNSIGNED NOT NULL,
+    action_type ENUM('cancelled') NOT NULL,
+    reason TEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (prescription_action_id),
+    KEY idx_pharmacy_prescription_action (prescription_id, created_at),
+    CONSTRAINT fk_pharmacy_action_prescription
+        FOREIGN KEY (prescription_id) REFERENCES prescriptions (prescription_id),
+    CONSTRAINT fk_pharmacy_action_user
+        FOREIGN KEY (acted_by_user_id) REFERENCES users (user_id)
 ) ENGINE=InnoDB;

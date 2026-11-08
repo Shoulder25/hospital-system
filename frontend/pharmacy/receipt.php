@@ -19,22 +19,17 @@ $initial = $initialMatch[0] ?? 'P';
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f5f8fa">
-    <title>Pharmacy receipt | Hospital Patient Processing</title>
+    <title>Pharmacy receipt | CareBridge</title>
     <link rel="stylesheet" href="../assets/css/auth.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
-    <link rel="stylesheet" href="../assets/css/pharmacy.css">
+    <link rel="stylesheet" href="../assets/css/pharmacy.css?v=<?= (int) filemtime(__DIR__ . '/../assets/css/pharmacy.css') ?>">
     <link rel="stylesheet" href="../assets/css/staff-layout.css">
-    <script src="../assets/js/pharmacy.js" defer></script>
+    <script src="../assets/js/pharmacy.js?v=<?= (int) filemtime(__DIR__ . '/../assets/js/pharmacy.js') ?>" defer></script>
     <script src="../assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page admin-page pharmacy-page pharmacy-receipt-page" data-base-path="<?= $escape($basePath) ?>" data-receipt-page>
     <div class="dashboard-layout">
-        <aside class="sidebar admin-sidebar">
-            <a class="brand-lockup sidebar-brand" href="index.php"><span class="brand-mark" aria-hidden="true">+</span><span>Care<span class="brand-light">Bridge</span></span></a>
-            <p class="sidebar-caption">PHARMACY</p>
-            <nav class="side-nav" aria-label="Pharmacy navigation"><a class="side-link" href="index.php"><span aria-hidden="true">＋</span> Pharmacy queue</a><a class="side-link" href="../dashboard.php"><span aria-hidden="true">⌂</span> Staff workspace</a></nav>
-            <div class="sidebar-bottom"><span class="sidebar-version">Hospital Patient Processing<br>Academic prototype</span></div>
-        </aside>
+        <aside class="sidebar admin-sidebar" aria-label="CareBridge navigation"></aside>
         <main class="dashboard-main">
             <header class="topbar"><div class="topbar-title"><span class="mobile-brand-mark" aria-hidden="true">+</span><span>Payment receipt</span></div><div class="topbar-actions"><span class="user-avatar"><?= $escape($initial) ?></span><div class="user-summary"><strong><?= $escape($staff['display_name']) ?></strong><span><?= $escape(ucwords(str_replace('_', ' ', $staff['role_name']))) ?></span></div><button class="button button-outline button-logout" type="button" data-sign-out>Sign out</button><button class="button button-outline button-small" type="button" data-print>Print receipt</button><a class="button button-outline button-small" href="index.php">Back to queue</a></div></header>
             <section class="dashboard-content admin-content pharmacy-content">

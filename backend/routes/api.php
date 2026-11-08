@@ -40,6 +40,11 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/therapy/dashboard' => ['GET'],
         '/api/therapy/reports' => ['GET'],
         '/api/pharmacy/queue' => ['GET'],
+        '/api/pharmacy/dashboard' => ['GET'],
+        '/api/pharmacy/prescriptions' => ['GET'],
+        '/api/pharmacy/inventory' => ['GET'],
+        '/api/pharmacy/stock-movements' => ['GET'],
+        '/api/pharmacy/reports' => ['GET'],
         '/api/nursing/dashboard' => ['GET'],
         '/api/nursing/queue' => ['GET'],
         '/api/nursing/completed' => ['GET'],
@@ -93,6 +98,9 @@ function dispatchApiRequest(string $method, string $path): void
     $pharmacyVisitId = null;
     $pharmacyAction = null;
     $pharmacyPaymentId = null;
+    $pharmacyRecordId = null;
+    $pharmacyRecordAction = null;
+    $pharmacyMedicineId = null;
     $emergencyVisitId = null;
     $emergencyAction = null;
     $emergencyNurseVisitId = null;
@@ -287,6 +295,23 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = in_array($pharmacyAction, ['', 'dispensings'], true)
             ? ['GET']
             : ['POST'];
+    }
+    if (preg_match(
+        '#^/api/pharmacy/prescriptions/([0-9]+)(?:/(exceptions|cancel|verify))?$#',
+        $path,
+        $matches
+    )) {
+        $pharmacyRecordId = $matches[1];
+        $pharmacyRecordAction = $matches[2] ?? '';
+        $routes[$path] = $pharmacyRecordAction === '' ? ['GET'] : ['POST'];
+    }
+    if (preg_match(
+        '#^/api/pharmacy/medicines/([0-9]+)/stock$#',
+        $path,
+        $matches
+    )) {
+        $pharmacyMedicineId = $matches[1];
+        $routes[$path] = ['POST'];
     }
     if (preg_match(
         '#^/api/pharmacy/payments/([0-9]+)/receipt$#',
@@ -641,6 +666,38 @@ function dispatchApiRequest(string $method, string $path): void
             } else {
                 handleEmergencyNurseVisitGet($emergencyNurseVisitId);
             }
+        } elseif ($pharmacyRecordId !== null) {
+            if ($pharmacyRecordAction === 'exceptions') {
+                handlePharmacyExceptionCreate($pharmacyRecordId);
+            } elseif ($pharmacyRecordAction === 'cancel') {
+                handlePharmacyPrescriptionCancel($pharmacyRecordId);
+            } elseif ($pharmacyRecordAction === 'verify') {
+                handlePharmacyPrescriptionVerify($pharmacyRecordId);
+            } else {
+                handlePharmacyPrescriptionDetailGet($pharmacyRecordId);
+            }
+        } elseif ($pharmacyMedicineId !== null) {
+            handlePharmacyStockMovementCreate($pharmacyMedicineId);
+        } elseif ($path === '/api/pharmacy/dashboard') {
+            handlePharmacyDashboardGet();
+        } elseif ($path === '/api/pharmacy/prescriptions') {
+            $search = $_GET['search'] ?? '';
+            $scope = $_GET['scope'] ?? 'all';
+            if (!is_string($search) || !is_string($scope)) {
+                jsonError('Invalid pharmacy prescription filters.', [], 422);
+            }
+            handlePharmacyPrescriptionsGet($search, $scope);
+        } elseif ($path === '/api/pharmacy/inventory') {
+            $search = $_GET['search'] ?? '';
+            $scope = $_GET['scope'] ?? 'all';
+            if (!is_string($search) || !is_string($scope)) {
+                jsonError('Invalid inventory filters.', [], 422);
+            }
+            handlePharmacyInventoryGet($search, $scope);
+        } elseif ($path === '/api/pharmacy/stock-movements') {
+            handlePharmacyStockMovementsGet();
+        } elseif ($path === '/api/pharmacy/reports') {
+            handlePharmacyReportsGet();
         } elseif ($pharmacyVisitId !== null) {
             if ($pharmacyAction === 'prescription') {
                 handlePharmacyPrescriptionSelect($pharmacyVisitId);

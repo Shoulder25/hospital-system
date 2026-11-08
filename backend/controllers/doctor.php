@@ -548,10 +548,18 @@ function handleDoctorVisitGet(string $visitId): void
 
     $prescriptionStatement = $database->prepare(
         'SELECT prescription.prescription_id, prescription.status,
-                prescription.created_at, prescriber.display_name AS prescribed_by
+                prescription.created_at, prescriber.display_name AS prescribed_by,
+                dispensing.dispensing_id, dispensing.dispensed_at,
+                dispensing.dispensing_notes,
+                verifier.display_name AS verified_by,
+                prescription.pharmacy_verified_at
          FROM prescriptions prescription
          INNER JOIN users prescriber
             ON prescriber.user_id = prescription.prescribed_by_user_id
+         LEFT JOIN dispensings dispensing
+            ON dispensing.prescription_id = prescription.prescription_id
+         LEFT JOIN users verifier
+            ON verifier.user_id = prescription.pharmacy_verified_by_user_id
          WHERE prescription.visit_id = :visit_id
          ORDER BY prescription.created_at DESC, prescription.prescription_id DESC'
     );
@@ -575,6 +583,13 @@ function handleDoctorVisitGet(string $visitId): void
             'status' => $prescription['status'],
             'created_at' => $prescription['created_at'],
             'prescribed_by' => $prescription['prescribed_by'],
+            'dispensing_id' => $prescription['dispensing_id'] === null
+                ? null
+                : (int) $prescription['dispensing_id'],
+            'dispensed_at' => $prescription['dispensed_at'],
+            'dispensing_notes' => $prescription['dispensing_notes'],
+            'pharmacy_verified_at' => $prescription['pharmacy_verified_at'],
+            'verified_by' => $prescription['verified_by'],
             'items' => array_map(static function (array $item): array {
                 return [
                     'medicine_name' => $item['medicine_name'],

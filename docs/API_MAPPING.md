@@ -40,8 +40,8 @@ does not treat the proposal as final. Routes are dispatched through
 | Therapy | `GET /api/therapy/appointments` | `GET /api/therapy/queue`; `GET /api/therapy/referrals/{id}` | Implemented; different paths |
 | Therapy | `POST /api/therapy/appointments` | `POST /api/diagnoses` | Doctor diagnosis can create a therapy referral |
 | Therapy | `POST /api/therapy/records` | `POST /api/therapy/referrals/{id}/sessions` | Implemented; different path |
-| Pharmacy | `GET /api/prescriptions` | `GET /api/pharmacy/queue`, `GET /api/pharmacy/visits/{id}` | Visit-scoped; no global prescriptions route |
-| Pharmacy | `PUT /api/prescriptions/{id}/status` | — | No direct route; prescription status changes during dispensing |
+| Pharmacy | `GET /api/prescriptions` | `GET /api/pharmacy/prescriptions`, `GET /api/pharmacy/visits/{id}` | Searchable prescription list and visit billing details |
+| Pharmacy | `PUT /api/prescriptions/{id}/status` | `POST /api/pharmacy/prescriptions/{id}/verify`; prescriber-only cancellation route | Pharmacy cannot change prescribed medicine or dose |
 | Pharmacy | `POST /api/dispensing` | `POST /api/pharmacy/visits/{id}/dispense` | Implemented; visit-scoped |
 | Billing | `GET /api/visits/{id}/bill` | `GET /api/pharmacy/visits/{id}` | Includes bill but requires pharmacy access |
 | Billing | `POST /api/bills` | — | Bills are created within ticket/pharmacy/therapy workflows |
@@ -56,7 +56,8 @@ log/reports and fee management, visit status, reception dashboard/organizations,
 doctor dashboards/queues, department order routing/start actions,
 specialist accept/outside-referral details, therapy completion,
 `GET /api/pharmacy/visits/{id}/dispensings` for dispensing history,
-medication-only prescription selection, and pharmacy receipts. Pharmacy
+medication-only prescription selection, pharmacy receipts, inventory/stock
+movements, pharmacy verification and prescription exception records. Pharmacy
 payment requests require a client UUID for idempotent retries. See
 `backend/routes/api.php` for the exact route patterns and methods.
 

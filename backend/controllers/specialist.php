@@ -135,6 +135,49 @@ function specialistReferralDetails(
     );
     $diagnosesStatement->execute(['visit_id' => $visitId]);
 
+    $prescriptionsStatement = $database->prepare(
+        'SELECT prescription.prescription_id, prescription.status,
+                prescription.created_at, prescription.pharmacy_verified_at,
+                verifier.display_name AS verified_by,
+                dispensing.dispensed_at, dispensing.dispensing_notes,
+                prescriber.display_name AS prescribed_by
+         FROM prescriptions prescription
+         INNER JOIN users prescriber
+            ON prescriber.user_id = prescription.prescribed_by_user_id
+         LEFT JOIN users verifier
+            ON verifier.user_id = prescription.pharmacy_verified_by_user_id
+         LEFT JOIN dispensings dispensing
+            ON dispensing.prescription_id = prescription.prescription_id
+         WHERE prescription.visit_id = :visit_id
+         ORDER BY prescription.created_at, prescription.prescription_id'
+    );
+    $prescriptionsStatement->execute(['visit_id' => $visitId]);
+    $prescriptionItemsStatement = $database->prepare(
+        'SELECT item.dosage, item.frequency, item.duration, item.quantity,
+                item.instructions, medicine.medicine_name
+         FROM prescription_items item
+         INNER JOIN medicines medicine ON medicine.medicine_id = item.medicine_id
+         WHERE item.prescription_id = :prescription_id
+         ORDER BY item.prescription_item_id'
+    );
+    $prescriptions = [];
+    foreach ($prescriptionsStatement->fetchAll() as $prescription) {
+        $prescriptionItemsStatement->execute([
+            'prescription_id' => (int) $prescription['prescription_id'],
+        ]);
+        $prescriptions[] = [
+            'prescription_id' => (int) $prescription['prescription_id'],
+            'status' => $prescription['status'],
+            'created_at' => $prescription['created_at'],
+            'prescribed_by' => $prescription['prescribed_by'],
+            'pharmacy_verified_at' => $prescription['pharmacy_verified_at'],
+            'verified_by' => $prescription['verified_by'],
+            'dispensed_at' => $prescription['dispensed_at'],
+            'dispensing_notes' => $prescription['dispensing_notes'],
+            'items' => $prescriptionItemsStatement->fetchAll(),
+        ];
+    }
+
     $sourceStatement = $database->prepare(
         'SELECT consultation.consultation_id, consultation.presenting_complaint,
                 consultation.clinical_observations, consultation.examination_findings,
@@ -221,6 +264,7 @@ function specialistReferralDetails(
         'tests' => $testsStatement->fetchAll(),
         'consultations' => $consultations,
         'diagnoses' => $diagnosesStatement->fetchAll(),
+        'prescriptions' => $prescriptions,
         'therapy_reports' => $therapyReports,
     ];
 }

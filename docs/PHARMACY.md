@@ -9,7 +9,32 @@ Payment retry protection adds nullable `client_request_id` and
 `client_request_hash` columns and a unique request-ID index to `payments`.
 Fresh installs receive them from `database/hosp.sql`; existing databases must
 apply `database/migrations/20261107_stage11_pharmacy_payment_idempotency.sql`.
-This is an academic prototype, not a clinical system. Use fictional data only.
+The additive pharmacy workflow migration is
+`database/migrations/20261108_pharmacy_inventory.sql`. It adds pharmacy
+verification fields, medicine reorder/expiry fields, dispensing notes,
+stock-movement history, prescription exceptions, and prescriber cancellation
+history. This is an academic prototype, not a clinical system. Use fictional
+data only.
+
+## Pharmacy pages
+
+All pages use the shared CareBridge sidebar, role-specific navigation, and
+common responsive layout:
+
+| Page | Purpose |
+|---|---|
+| `frontend/pharmacy/index.php` | Dashboard statistics and pharmacy queue |
+| `frontend/pharmacy/prescriptions.php` | Incoming prescriptions |
+| `frontend/pharmacy/pending.php` | Active undispensed prescriptions |
+| `frontend/pharmacy/patients.php` | Patients with active pharmacy needs |
+| `frontend/pharmacy/prescription-details.php` | Read-only prescription review and exceptions |
+| `frontend/pharmacy/dispensing.php` | Payment, stock checks, and dispensing |
+| `frontend/pharmacy/inventory.php` | Medicine stock, reorder levels, and expiry |
+| `frontend/pharmacy/stock-entry.php` | Received stock and audited adjustments |
+| `frontend/pharmacy/stock-alerts.php` | Low-stock and expired-medicine alerts |
+| `frontend/pharmacy/payments.php` | Consolidated visit bill and payment status |
+| `frontend/pharmacy/history.php` | Searchable prescription history |
+| `frontend/pharmacy/reports.php` | Pharmacy counts and stock movements |
 
 ## Status and billing workflow
 
@@ -36,8 +61,20 @@ This is an academic prototype, not a clinical system. Use fictional data only.
 - Dispensing requires active, undispensed prescription items and a zero
   balance covered by approved payments. One transaction locks stock rows,
   verifies sufficient inventory, creates dispensing records, decrements
-  stock, completes the prescription, and completes the visit. Any failure
+  stock, records stock movements and pharmacist notes, completes the
+  prescription, and completes the visit. Each prescription must first be
+  verified by an authenticated pharmacist. Expired or inactive medicines,
+  insufficient stock, and duplicate dispensing are rejected. Any failure
   rolls the operation back.
+- Stock receipts and adjustments lock the medicine row, validate the resulting
+  balance, update inventory, and append an auditable movement. Expiry is
+  tracked at medicine level (not by batch) in this academic prototype.
+- A pharmacist can record an unavailable-medicine or other dispensing
+  exception without changing the prescription or its dose. Only the original
+  prescribing clinician (or system administrator) can cancel an active/draft
+  prescription; cancellation stores a reason and voids unpaid medication bill
+  items. Prescriptions with approved payments or dispensing records cannot be
+  cancelled here; dose corrections require a clinician to cancel and reissue.
 
 ### Medication-collection-only assumption
 
@@ -56,11 +93,21 @@ specification. They require an authenticated `pharmacist` or
 | Method | Route | Request | Result |
 |---|---|---|---|
 | GET | `/api/pharmacy/queue?search=` | Optional patient number, name, or visit ID | Pharmacy queue |
+| GET | `/api/pharmacy/dashboard` | None | Pending prescriptions, visits, low-stock and expired counts |
+| GET | `/api/pharmacy/prescriptions?scope=&search=` | Scope: `all`, `pending`, `patients`, or `history` | Patient, visit, prescriber, medicine and dispensing status |
+| GET | `/api/pharmacy/prescriptions/{id}` | None | Read-only prescription details, stock/expiry and exception history |
+| POST | `/api/pharmacy/prescriptions/{id}/verify` | `{}` | Records pharmacist verification required before dispensing |
+| POST | `/api/pharmacy/prescriptions/{id}/exceptions` | `{"prescription_item_id":1,"reason":"Medicine unavailable"}` | Appends an exception; does not change prescription |
+| POST | `/api/pharmacy/prescriptions/{id}/cancel` | Prescribing clinician/admin only: `{"reason":"..."}` | Audited cancellation; refused after approved payment or dispensing |
+| GET | `/api/pharmacy/inventory?scope=&search=` | Scope: `all`, `low`, `expired`, or `alerts` | Medicine stock, reorder level, expiry, and alert state |
+| POST | `/api/pharmacy/medicines/{id}/stock` | `{"movement_type":"received","quantity":"5","expiry_date":"2027-01-01","notes":"Demo delivery"}` | Appends received stock or a signed adjustment |
+| GET | `/api/pharmacy/stock-movements` | None | Recent receipts, adjustments, and dispensing movements |
+| GET | `/api/pharmacy/reports` | None | Daily dispensing totals |
 | GET | `/api/pharmacy/visits/{id}` | None | Patient, prescriptions, grouped bill, payments, schemes, and eligible earlier prescriptions. Idempotently adds missing current-prescription charges. |
 | GET | `/api/pharmacy/visits/{id}/dispensings` | None | Visit-linked dispensing history, with medicine, quantity, pharmacist, and date |
 | POST | `/api/pharmacy/visits/{id}/prescription` | `{"prescription_id":12}` | Selects and bills a medication-only visit's earlier prescription |
 | POST | `/api/pharmacy/visits/{id}/payments` | `{"payment_method":"cash","amount":"5.00","client_request_id":"<uuid>"}` | Approved partial/full payment and receipt number; identical retries do not duplicate payment |
-| POST | `/api/pharmacy/visits/{id}/dispense` | `{}` | Dispensing records and updated stock; visit completed |
+| POST | `/api/pharmacy/visits/{id}/dispense` | Optional `{"notes":"Counselling note"}` | Dispensing records, stock history and visit completion; requires verification and approved payment |
 | GET | `/api/pharmacy/payments/{id}/receipt` | None | Payment, patient, visit, and consolidated bill lines |
 
 Use the central `backend/index.php?route=...` entry point. Payment methods are
@@ -108,12 +155,17 @@ Anonymous users receive HTTP 401 and other roles HTTP 403.
    and the remaining balance. Refresh or retry an uncertain submission to
    confirm one payment is recorded.
 5. Dispense only after the bill is fully covered. Confirm the prescription
-   is completed, medicine stock drops, and the visit becomes completed.
-   The visit panel shows saved dispensing history.
+   is verified and the bill is fully covered. Confirm the prescription is
+   completed, medicine stock drops, a stock movement is saved, and the visit
+   becomes completed. The visit panel shows saved dispensing history.
 6. For a visit without a prescription, pay the outstanding amount and confirm
    it completes without dispensing.
 7. Test a prescription with insufficient stock and confirm no stock,
    dispensing, or prescription status changes are committed.
+8. Add received stock and a reasoned adjustment; verify each movement in
+   stock history. Set a medicine expiry date in the past and confirm dispensing
+   is blocked. Record an unavailable-medicine exception without altering the
+   prescribed quantity or directions.
 
 ## Postman testing
 
@@ -132,16 +184,18 @@ Anonymous users receive HTTP 401 and other roles HTTP 403.
 5. Fetch `/backend/index.php?route=/api/pharmacy/visits/{id}/dispensings`
    and verify it is available only to pharmacist/admin accounts.
 6. Try dispensing before payment (expect HTTP 409), then after full approved
-   payment. Verify `dispensings`, `dispensing_items`, stock, prescription,
-   bill, and visit status in the database.
+   payment and pharmacy verification. Verify `dispensings`,
+   `dispensing_items`, stock movement, prescription, bill, and visit status.
 7. With a prescription whose total stock is too low, verify dispensing
    returns HTTP 409 and makes no partial updates.
+8. Confirm non-prescriber cancellation is rejected; the original prescriber
+   may cancel only an unpaid, undispensed prescription with a reason.
 
-For an existing database, apply the payment idempotency migration once after
-backing up the database:
+For an existing database, back it up and apply the migrations once in order:
 
 ```powershell
 C:\xampp\mysql\bin\mysql.exe -u YOUR_DB_USER -p YOUR_DATABASE < database\migrations\20261107_stage11_pharmacy_payment_idempotency.sql
+C:\xampp\mysql\bin\mysql.exe -u YOUR_DB_USER -p YOUR_DATABASE < database\migrations\20261108_pharmacy_inventory.sql
 ```
 
 This local module uses simulated card and medical-aid approvals; no external

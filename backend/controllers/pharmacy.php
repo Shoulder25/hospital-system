@@ -20,8 +20,8 @@ function recordPharmacyAudit(
     PDO $database,
     int $userId,
     string $action,
-    int $patientId,
-    int $visitId
+    ?int $patientId,
+    ?int $visitId
 ): void {
     $statement = $database->prepare(
         'INSERT INTO audit_log (user_id, patient_id, visit_id, action)
@@ -163,6 +163,8 @@ function pharmacyRelatedPrescriptions(
         'SELECT DISTINCT prescription.prescription_id,
                 prescription.visit_id AS prescription_visit_id,
                 prescription.status, prescription.created_at,
+                prescription.pharmacy_verified_at,
+                prescription.pharmacy_verified_by_user_id,
                 prescriber.display_name AS prescribed_by,
                 source_visit.arrived_at AS prescription_visit_at,
                 dispensing.dispensing_id, dispensing.dispensed_at
@@ -220,6 +222,11 @@ function pharmacyRelatedPrescriptions(
             'status' => $row['status'],
             'created_at' => $row['created_at'],
             'prescribed_by' => $row['prescribed_by'],
+            'pharmacy_verified_at' => $row['pharmacy_verified_at'],
+            'pharmacy_verified_by_user_id' =>
+                $row['pharmacy_verified_by_user_id'] === null
+                    ? null
+                    : (int) $row['pharmacy_verified_by_user_id'],
             'is_dispensed' => $row['dispensing_id'] !== null,
             'dispensed_at' => $row['dispensed_at'],
             'items' => array_map(static function (array $item): array {
@@ -251,7 +258,8 @@ function pharmacyDispensingHistory(PDO $database, int $visitId): array
 {
     $statement = $database->prepare(
         'SELECT dispensing.dispensing_id, dispensing.prescription_id,
-                dispensing.dispensed_at, pharmacist.display_name AS pharmacist_name,
+                dispensing.dispensed_at, dispensing.dispensing_notes,
+                pharmacist.display_name AS pharmacist_name,
                 prescription_item.prescription_item_id, medicine.medicine_name,
                 dispensing_item.quantity_dispensed, dispensing_item.unit_price
          FROM dispensings dispensing
@@ -279,6 +287,7 @@ function pharmacyDispensingHistory(PDO $database, int $visitId): array
                 'dispensing_id' => $dispensingId,
                 'prescription_id' => (int) $row['prescription_id'],
                 'dispensed_at' => $row['dispensed_at'],
+                'notes' => $row['dispensing_notes'],
                 'pharmacist_name' => $row['pharmacist_name'],
                 'items' => [],
             ];
@@ -1329,7 +1338,9 @@ function handlePharmacyDispense(string $visitId): void
         }
 
         $prescriptionStatement = $database->prepare(
-            'SELECT prescription.prescription_id
+            'SELECT prescription.prescription_id,
+                    prescription.pharmacy_verified_at,
+                    prescription.pharmacy_verified_by_user_id
              FROM prescriptions prescription
              WHERE prescription.status = \'active\'
                AND NOT EXISTS (
@@ -1363,6 +1374,24 @@ function handlePharmacyDispense(string $visitId): void
         if ($prescriptionIds === []) {
             $database->rollBack();
             jsonError('There is no active prescription to dispense.', [], 409);
+        }
+        $unverified = $database->prepare(
+            'SELECT prescription_id
+             FROM prescriptions
+             WHERE prescription_id IN (' .
+                implode(',', array_fill(0, count($prescriptionIds), '?')) . ')
+               AND (pharmacy_verified_at IS NULL
+                    OR pharmacy_verified_by_user_id IS NULL)
+             LIMIT 1'
+        );
+        $unverified->execute($prescriptionIds);
+        if ($unverified->fetchColumn() !== false) {
+            $database->rollBack();
+            jsonError(
+                'Verify every active prescription before dispensing.',
+                ['prescription' => 'Open each prescription and record pharmacy verification.'],
+                409
+            );
         }
 
         $placeholders = implode(',', array_fill(0, count($prescriptionIds), '?'));
@@ -1659,5 +1688,841 @@ function handlePharmacyReceiptGet(string $paymentId): void
                 (string) $payment['first_name'] . ' ' . (string) $payment['last_name']
             ),
         ],
+    ]);
+}
+
+function handlePharmacyDashboardGet(): void
+{
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    $counts = $database->query(
+        'SELECT
+            (SELECT COUNT(*)
+             FROM prescriptions prescription
+             WHERE prescription.status = \'active\'
+               AND NOT EXISTS (
+                    SELECT 1 FROM dispensings dispensing
+                    WHERE dispensing.prescription_id = prescription.prescription_id
+               )) AS pending_prescriptions,
+            (SELECT COUNT(*)
+             FROM visits
+             WHERE status IN (\'awaiting_pharmacy\', \'awaiting_payment\'))
+                AS pharmacy_visits,
+            (SELECT COUNT(*)
+             FROM medicines
+             WHERE is_active = 1 AND quantity_in_stock <= reorder_level)
+                AS low_stock_medicines,
+            (SELECT COUNT(*)
+             FROM medicines
+             WHERE is_active = 1 AND expiry_date < CURRENT_DATE)
+                AS expired_medicines,
+            (SELECT COUNT(*)
+             FROM dispensings
+             WHERE DATE(dispensed_at) = CURRENT_DATE) AS dispensed_today'
+    )->fetch();
+    recordPharmacyAudit(
+        $database,
+        (int) $user['user_id'],
+        'pharmacy.dashboard.viewed',
+        null,
+        null
+    );
+    jsonSuccess('Pharmacy dashboard loaded.', [
+        'pending' => (int) $counts['pending_prescriptions'],
+        'visits' => (int) $counts['pharmacy_visits'],
+        'low_stock' => (int) $counts['low_stock_medicines'],
+        'expired' => (int) $counts['expired_medicines'],
+        'dispensed_today' => (int) $counts['dispensed_today'],
+    ]);
+}
+
+function handlePharmacyPrescriptionsGet(string $search, string $scope): void
+{
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    $search = trim($search);
+    if (strlen($search) > 100
+        || !in_array($scope, ['all', 'pending', 'patients', 'history'], true)) {
+        jsonError('Invalid prescription search filters.', [], 422);
+    }
+
+    $filters = '';
+    $parameters = [];
+    if ($scope === 'pending' || $scope === 'patients') {
+        $filters .= ' AND prescription.status = \'active\'
+            AND NOT EXISTS (
+                SELECT 1 FROM dispensings existing_dispensing
+                WHERE existing_dispensing.prescription_id =
+                      prescription.prescription_id
+            )';
+    } elseif ($scope === 'all') {
+        $filters .= ' AND prescription.status IN (\'active\', \'draft\')';
+    }
+    if ($search !== '') {
+        $filters .= ' AND (
+            patient.patient_number LIKE :patient_number
+            OR patient.first_name LIKE :first_name
+            OR patient.last_name LIKE :last_name
+            OR CONCAT_WS(\' \', patient.first_name, patient.last_name)
+                LIKE :full_name
+            OR CAST(visit.visit_id AS CHAR) LIKE :visit_id
+            OR CAST(prescription.prescription_id AS CHAR)
+                LIKE :prescription_id
+        )';
+        $pattern = '%' . $search . '%';
+        $parameters = [
+            'patient_number' => $pattern,
+            'first_name' => $pattern,
+            'last_name' => $pattern,
+            'full_name' => $pattern,
+            'visit_id' => $pattern,
+            'prescription_id' => $pattern,
+        ];
+    }
+
+    $statement = $database->prepare(
+        'SELECT prescription.prescription_id, prescription.visit_id,
+                prescription.status, prescription.created_at,
+                prescription.pharmacy_verified_at,
+                prescriber.display_name AS prescribed_by,
+                visit.patient_id, visit.status AS visit_status,
+                visit.arrived_at, patient.patient_number,
+                patient.first_name, patient.last_name,
+                COUNT(item.prescription_item_id) AS medicine_count,
+                GROUP_CONCAT(DISTINCT medicine.medicine_name
+                    ORDER BY medicine.medicine_name SEPARATOR \', \')
+                    AS medicine_names,
+                EXISTS (
+                    SELECT 1 FROM dispensings dispensing
+                    WHERE dispensing.prescription_id =
+                          prescription.prescription_id
+                ) AS is_dispensed,
+                COALESCE((
+                    SELECT SUM(bill_item.quantity * bill_item.unit_amount)
+                    FROM bills bill
+                    INNER JOIN bill_items bill_item
+                        ON bill_item.bill_id = bill.bill_id
+                    LEFT JOIN prescription_items charged_item
+                        ON charged_item.prescription_item_id =
+                           bill_item.prescription_item_id
+                    WHERE bill.visit_id = visit.visit_id
+                      AND bill_item.is_voided = 0
+                      AND (
+                        bill_item.prescription_item_id IS NULL
+                        OR charged_item.prescription_id =
+                           prescription.prescription_id
+                      )
+                ), 0.00) AS billed_amount,
+                COALESCE((
+                    SELECT SUM(payment.amount)
+                    FROM payments payment
+                    INNER JOIN bills payment_bill
+                        ON payment_bill.bill_id = payment.bill_id
+                    WHERE payment_bill.visit_id = visit.visit_id
+                      AND payment.status = \'approved\'
+                ), 0.00) AS approved_amount
+         FROM prescriptions prescription
+         INNER JOIN visits visit ON visit.visit_id = prescription.visit_id
+         INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+         INNER JOIN users prescriber
+            ON prescriber.user_id = prescription.prescribed_by_user_id
+         LEFT JOIN prescription_items item
+            ON item.prescription_id = prescription.prescription_id
+         LEFT JOIN medicines medicine ON medicine.medicine_id = item.medicine_id
+         WHERE 1 = 1 ' . $filters . '
+         GROUP BY prescription.prescription_id, prescription.visit_id,
+                  prescription.status, prescription.created_at,
+                  prescription.pharmacy_verified_at, prescriber.display_name,
+                  visit.patient_id, visit.status, visit.arrived_at,
+                  patient.patient_number, patient.first_name, patient.last_name
+         ORDER BY prescription.created_at DESC, prescription.prescription_id DESC
+         LIMIT 250'
+    );
+    $statement->execute($parameters);
+    $prescriptions = [];
+    foreach ($statement->fetchAll() as $row) {
+        $prescriptions[] = [
+            'prescription_id' => (int) $row['prescription_id'],
+            'visit_id' => (int) $row['visit_id'],
+            'patient_id' => (int) $row['patient_id'],
+            'patient_number' => $row['patient_number'],
+            'patient_name' => trim(
+                (string) $row['first_name'] . ' ' . (string) $row['last_name']
+            ),
+            'visit_status' => $row['visit_status'],
+            'prescription_status' => $row['status'],
+            'prescribed_by' => $row['prescribed_by'],
+            'prescription_date' => $row['created_at'],
+            'arrived_at' => $row['arrived_at'],
+            'medicine_count' => (int) $row['medicine_count'],
+            'medicine_names' => $row['medicine_names'] ?? '',
+            'is_verified' => $row['pharmacy_verified_at'] !== null,
+            'is_dispensed' => (bool) $row['is_dispensed'],
+            'balance' => number_format(
+                max(0, (float) $row['billed_amount'] - (float) $row['approved_amount']),
+                2,
+                '.',
+                ''
+            ),
+        ];
+        recordPharmacyAudit(
+            $database,
+            (int) $user['user_id'],
+            'pharmacy.prescriptions.viewed',
+            (int) $row['patient_id'],
+            (int) $row['visit_id']
+        );
+    }
+    jsonSuccess('Pharmacy prescriptions loaded.', [
+        'prescriptions' => $prescriptions,
+        'count' => count($prescriptions),
+    ]);
+}
+
+function handlePharmacyPrescriptionDetailGet(string $prescriptionId): void
+{
+    if (!ctype_digit($prescriptionId) || (int) $prescriptionId < 1) {
+        jsonError('A valid prescription ID is required.', [], 422);
+    }
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    $statement = $database->prepare(
+        'SELECT prescription.prescription_id, prescription.visit_id,
+                prescription.status, prescription.created_at,
+                prescription.pharmacy_verified_at,
+                verifier.display_name AS verified_by,
+                prescriber.display_name AS prescribed_by,
+                visit.patient_id, visit.status AS visit_status,
+                visit.arrived_at, patient.patient_number,
+                patient.first_name, patient.last_name
+         FROM prescriptions prescription
+         INNER JOIN visits visit ON visit.visit_id = prescription.visit_id
+         INNER JOIN patients patient ON patient.patient_id = visit.patient_id
+         INNER JOIN users prescriber
+            ON prescriber.user_id = prescription.prescribed_by_user_id
+         LEFT JOIN users verifier
+            ON verifier.user_id = prescription.pharmacy_verified_by_user_id
+         WHERE prescription.prescription_id = :prescription_id
+         LIMIT 1'
+    );
+    $statement->execute(['prescription_id' => (int) $prescriptionId]);
+    $row = $statement->fetch();
+    if ($row === false) {
+        jsonError('Prescription not found.', [], 404);
+    }
+    $itemStatement = $database->prepare(
+        'SELECT item.prescription_item_id, item.medicine_id,
+                medicine.medicine_name, item.dosage, item.frequency,
+                item.duration, item.quantity, item.instructions,
+                medicine.quantity_in_stock, medicine.expiry_date,
+                medicine.is_active,
+                EXISTS (
+                    SELECT 1 FROM dispensing_items dispensed_item
+                    WHERE dispensed_item.prescription_item_id =
+                          item.prescription_item_id
+                ) AS is_dispensed
+         FROM prescription_items item
+         INNER JOIN medicines medicine ON medicine.medicine_id = item.medicine_id
+         WHERE item.prescription_id = :prescription_id
+         ORDER BY item.prescription_item_id'
+    );
+    $itemStatement->execute(['prescription_id' => (int) $prescriptionId]);
+    $items = array_map(static function (array $item): array {
+        return [
+            'prescription_item_id' => (int) $item['prescription_item_id'],
+            'medicine_id' => (int) $item['medicine_id'],
+            'medicine_name' => $item['medicine_name'],
+            'dosage' => $item['dosage'],
+            'frequency' => $item['frequency'],
+            'duration' => $item['duration'],
+            'quantity' => (string) $item['quantity'],
+            'instructions' => $item['instructions'],
+            'stock_available' => (string) $item['quantity_in_stock'],
+            'expiry_date' => $item['expiry_date'],
+            'medicine_active' => (bool) $item['is_active'],
+            'is_dispensed' => (bool) $item['is_dispensed'],
+        ];
+    }, $itemStatement->fetchAll());
+    $exceptionStatement = $database->prepare(
+        'SELECT exception.exception_id, exception.prescription_item_id,
+                exception.status, exception.reason, exception.created_at,
+                recorder.display_name AS recorded_by
+         FROM pharmacy_prescription_exceptions exception
+         INNER JOIN prescription_items item
+            ON item.prescription_item_id = exception.prescription_item_id
+         INNER JOIN users recorder
+            ON recorder.user_id = exception.recorded_by_user_id
+         WHERE item.prescription_id = :prescription_id
+         ORDER BY exception.created_at DESC, exception.exception_id DESC'
+    );
+    $exceptionStatement->execute(['prescription_id' => (int) $prescriptionId]);
+    $exceptions = array_map(static function (array $exception): array {
+        return [
+            'exception_id' => (int) $exception['exception_id'],
+            'prescription_item_id' => (int) $exception['prescription_item_id'],
+            'status' => $exception['status'],
+            'reason' => $exception['reason'],
+            'created_at' => $exception['created_at'],
+            'recorded_by' => $exception['recorded_by'],
+        ];
+    }, $exceptionStatement->fetchAll());
+    recordPharmacyAudit(
+        $database,
+        (int) $user['user_id'],
+        'pharmacy.prescription.viewed',
+        (int) $row['patient_id'],
+        (int) $row['visit_id']
+    );
+    jsonSuccess('Prescription details loaded.', [
+        'prescription' => [
+            'prescription_id' => (int) $row['prescription_id'],
+            'visit_id' => (int) $row['visit_id'],
+            'patient_id' => (int) $row['patient_id'],
+            'patient_number' => $row['patient_number'],
+            'patient_name' => trim(
+                (string) $row['first_name'] . ' ' . (string) $row['last_name']
+            ),
+            'visit_status' => $row['visit_status'],
+            'prescription_status' => $row['status'],
+            'prescribed_by' => $row['prescribed_by'],
+            'prescription_date' => $row['created_at'],
+            'arrived_at' => $row['arrived_at'],
+            'is_verified' => $row['pharmacy_verified_at'] !== null,
+            'verified_by' => $row['verified_by'],
+            'verified_at' => $row['pharmacy_verified_at'],
+            'items' => $items,
+            'exceptions' => $exceptions,
+        ],
+    ]);
+}
+
+function handlePharmacyPrescriptionVerify(string $prescriptionId): void
+{
+    if (!ctype_digit($prescriptionId) || (int) $prescriptionId < 1) {
+        jsonError('A valid prescription ID is required.', [], 422);
+    }
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    requireCsrfRequest();
+    try {
+        $database->beginTransaction();
+        $statement = $database->prepare(
+            'SELECT prescription.visit_id, prescription.status,
+                    visit.patient_id
+             FROM prescriptions prescription
+             INNER JOIN visits visit ON visit.visit_id = prescription.visit_id
+             WHERE prescription.prescription_id = :prescription_id
+             LIMIT 1 FOR UPDATE'
+        );
+        $statement->execute(['prescription_id' => (int) $prescriptionId]);
+        $prescription = $statement->fetch();
+        if ($prescription === false) {
+            $database->rollBack();
+            jsonError('Prescription not found.', [], 404);
+        }
+        if ($prescription['status'] !== 'active') {
+            $database->rollBack();
+            jsonError('Only active prescriptions can be verified.', [], 409);
+        }
+        $update = $database->prepare(
+            'UPDATE prescriptions
+             SET pharmacy_verified_by_user_id = :user_id,
+                 pharmacy_verified_at = CURRENT_TIMESTAMP
+             WHERE prescription_id = :prescription_id
+               AND status = \'active\''
+        );
+        $update->execute([
+            'user_id' => (int) $user['user_id'],
+            'prescription_id' => (int) $prescriptionId,
+        ]);
+        if ($update->rowCount() !== 1) {
+            $database->rollBack();
+            jsonError('Prescription verification could not be saved.', [], 409);
+        }
+        recordPharmacyAudit(
+            $database,
+            (int) $user['user_id'],
+            'pharmacy.prescription.verified',
+            (int) $prescription['patient_id'],
+            (int) $prescription['visit_id']
+        );
+        $database->commit();
+    } catch (Throwable $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        error_log('Pharmacy prescription verification failed: ' . $exception->getMessage());
+        jsonError('Unable to verify this prescription right now.', [], 500);
+    }
+    jsonSuccess('Prescription verified for dispensing.', [
+        'prescription_id' => (int) $prescriptionId,
+        'verified_by' => (int) $user['user_id'],
+    ]);
+}
+
+function handlePharmacyExceptionCreate(string $prescriptionId): void
+{
+    if (!ctype_digit($prescriptionId) || (int) $prescriptionId < 1) {
+        jsonError('A valid prescription ID is required.', [], 422);
+    }
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    requireCsrfRequest();
+    $input = readJsonRequest();
+    $itemId = $input['prescription_item_id'] ?? null;
+    $reason = $input['reason'] ?? null;
+    if ((!is_int($itemId)
+            && !(is_string($itemId) && ctype_digit($itemId)))
+        || (int) $itemId < 1
+        || !is_string($reason)
+        || trim($reason) === ''
+        || strlen($reason) > 5000) {
+        jsonError('Select a prescription item and enter an exception reason.', [
+            'reason' => 'A reason of at most 5,000 characters is required.',
+        ], 422);
+    }
+    $statement = $database->prepare(
+        'SELECT visit.patient_id, prescription.visit_id, prescription.status
+         FROM prescriptions prescription
+         INNER JOIN visits visit ON visit.visit_id = prescription.visit_id
+         INNER JOIN prescription_items item
+            ON item.prescription_id = prescription.prescription_id
+         WHERE prescription.prescription_id = :prescription_id
+           AND item.prescription_item_id = :item_id
+         LIMIT 1'
+    );
+    $statement->execute([
+        'prescription_id' => (int) $prescriptionId,
+        'item_id' => (int) $itemId,
+    ]);
+    $prescription = $statement->fetch();
+    if ($prescription === false) {
+        jsonError('The selected item does not belong to this prescription.', [], 404);
+    }
+    if ($prescription['status'] !== 'active') {
+        jsonError('Exceptions can only be recorded on active prescriptions.', [], 409);
+    }
+    try {
+        $insert = $database->prepare(
+            'INSERT INTO pharmacy_prescription_exceptions
+                (prescription_item_id, recorded_by_user_id, reason)
+             VALUES (:item_id, :user_id, :reason)'
+        );
+        $insert->execute([
+            'item_id' => (int) $itemId,
+            'user_id' => (int) $user['user_id'],
+            'reason' => trim($reason),
+        ]);
+        recordPharmacyAudit(
+            $database,
+            (int) $user['user_id'],
+            'pharmacy.prescription.exception_recorded',
+            (int) $prescription['patient_id'],
+            (int) $prescription['visit_id']
+        );
+    } catch (Throwable $exception) {
+        error_log('Pharmacy prescription exception could not be saved: ' . $exception->getMessage());
+        jsonError('Unable to record the prescription exception right now.', [], 500);
+    }
+    jsonSuccess('Pharmacy exception recorded.', [
+        'exception_id' => (int) $database->lastInsertId(),
+    ], 201);
+}
+
+function handlePharmacyPrescriptionCancel(string $prescriptionId): void
+{
+    if (!ctype_digit($prescriptionId) || (int) $prescriptionId < 1) {
+        jsonError('A valid prescription ID is required.', [], 422);
+    }
+    $database = getDatabaseConnection();
+    $user = getAuthenticatedUser($database);
+    if ($user === null) {
+        jsonError('Authentication is required.', [], 401);
+    }
+    if (!in_array($user['role_name'], [
+        'general_doctor',
+        'resident_specialist',
+        'locum_specialist',
+        'emergency_doctor',
+        'system_administrator',
+    ], true)) {
+        jsonError('Only an authorized prescriber may cancel a prescription.', [], 403);
+    }
+    requireCsrfRequest();
+    $input = readJsonRequest();
+    $reason = $input['reason'] ?? null;
+    if (!is_string($reason) || trim($reason) === '' || strlen($reason) > 5000) {
+        jsonError('A cancellation reason is required.', [
+            'reason' => 'Enter a reason of at most 5,000 characters.',
+        ], 422);
+    }
+    try {
+        $database->beginTransaction();
+        $statement = $database->prepare(
+            'SELECT prescription.visit_id, prescription.status,
+                    prescription.prescribed_by_user_id, visit.patient_id
+             FROM prescriptions prescription
+             INNER JOIN visits visit ON visit.visit_id = prescription.visit_id
+             WHERE prescription.prescription_id = :prescription_id
+             LIMIT 1 FOR UPDATE'
+        );
+        $statement->execute(['prescription_id' => (int) $prescriptionId]);
+        $prescription = $statement->fetch();
+        if ($prescription === false) {
+            $database->rollBack();
+            jsonError('Prescription not found.', [], 404);
+        }
+        if ($user['role_name'] !== 'system_administrator'
+            && (int) $prescription['prescribed_by_user_id'] !== (int) $user['user_id']) {
+            $database->rollBack();
+            jsonError('Only the prescribing clinician may cancel this prescription.', [], 403);
+        }
+        if (!in_array($prescription['status'], ['active', 'draft'], true)) {
+            $database->rollBack();
+            jsonError('Only active or draft prescriptions may be cancelled.', [], 409);
+        }
+        $dispensed = $database->prepare(
+            'SELECT 1 FROM dispensings
+             WHERE prescription_id = :prescription_id LIMIT 1'
+        );
+        $dispensed->execute(['prescription_id' => (int) $prescriptionId]);
+        if ($dispensed->fetchColumn() !== false) {
+            $database->rollBack();
+            jsonError('A dispensed prescription cannot be cancelled.', [], 409);
+        }
+        $payment = $database->prepare(
+            'SELECT payment.payment_id
+             FROM payments payment
+             INNER JOIN bills bill ON bill.bill_id = payment.bill_id
+             WHERE bill.visit_id = :visit_id
+               AND payment.status = \'approved\'
+             LIMIT 1 FOR UPDATE'
+        );
+        $payment->execute(['visit_id' => (int) $prescription['visit_id']]);
+        if ($payment->fetchColumn() !== false) {
+            $database->rollBack();
+            jsonError(
+                'This visit has approved payments; contact the cashier before cancellation.',
+                [],
+                409
+            );
+        }
+        $database->prepare(
+            'UPDATE bill_items bill_item
+             INNER JOIN prescription_items item
+                ON item.prescription_item_id = bill_item.prescription_item_id
+             SET bill_item.is_voided = 1,
+                 bill_item.voided_at = CURRENT_TIMESTAMP,
+                 bill_item.voided_by_user_id = :user_id
+             WHERE item.prescription_id = :prescription_id
+               AND bill_item.is_voided = 0'
+        )->execute([
+            'user_id' => (int) $user['user_id'],
+            'prescription_id' => (int) $prescriptionId,
+        ]);
+        $update = $database->prepare(
+            'UPDATE prescriptions SET status = \'cancelled\'
+             WHERE prescription_id = :prescription_id
+               AND status IN (\'active\', \'draft\')'
+        );
+        $update->execute(['prescription_id' => (int) $prescriptionId]);
+        if ($update->rowCount() !== 1) {
+            $database->rollBack();
+            jsonError('Prescription cancellation could not be saved.', [], 409);
+        }
+        $action = $database->prepare(
+            'INSERT INTO pharmacy_prescription_actions
+                (prescription_id, acted_by_user_id, action_type, reason)
+             VALUES (:prescription_id, :user_id, \'cancelled\', :reason)'
+        );
+        $action->execute([
+            'prescription_id' => (int) $prescriptionId,
+            'user_id' => (int) $user['user_id'],
+            'reason' => trim($reason),
+        ]);
+        $billStatement = $database->prepare(
+            'SELECT bill_id FROM bills WHERE visit_id = :visit_id LIMIT 1'
+        );
+        $billStatement->execute(['visit_id' => (int) $prescription['visit_id']]);
+        $billId = $billStatement->fetchColumn();
+        if ($billId !== false) {
+            billingRefreshBillTotal($database, (int) $billId);
+        }
+        recordPharmacyAudit(
+            $database,
+            (int) $user['user_id'],
+            'pharmacy.prescription.cancelled',
+            (int) $prescription['patient_id'],
+            (int) $prescription['visit_id']
+        );
+        $database->commit();
+    } catch (Throwable $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        error_log('Authorized prescription cancellation failed: ' . $exception->getMessage());
+        jsonError('Unable to cancel the prescription right now.', [], 500);
+    }
+    jsonSuccess('Prescription cancelled by its authorized prescriber.', [
+        'prescription_id' => (int) $prescriptionId,
+        'status' => 'cancelled',
+    ]);
+}
+
+function handlePharmacyInventoryGet(string $search, string $scope): void
+{
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    $search = trim($search);
+    if (strlen($search) > 100
+        || !in_array($scope, ['all', 'low', 'expired', 'alerts'], true)) {
+        jsonError('Invalid inventory filters.', [], 422);
+    }
+    $where = ' WHERE medicine.is_active = 1';
+    $parameters = [];
+    if ($scope === 'low') {
+        $where .= ' AND medicine.quantity_in_stock <= medicine.reorder_level';
+    } elseif ($scope === 'expired') {
+        $where .= ' AND medicine.expiry_date < CURRENT_DATE';
+    } elseif ($scope === 'alerts') {
+        $where .= ' AND (
+            medicine.quantity_in_stock <= medicine.reorder_level
+            OR medicine.expiry_date < CURRENT_DATE
+        )';
+    }
+    if ($search !== '') {
+        $where .= ' AND (medicine.medicine_name LIKE :medicine_name
+            OR CAST(medicine.medicine_id AS CHAR) LIKE :medicine_id)';
+        $pattern = '%' . $search . '%';
+        $parameters = [
+            'medicine_name' => $pattern,
+            'medicine_id' => $pattern,
+        ];
+    }
+    $statement = $database->prepare(
+        'SELECT medicine_id, medicine_name, unit_price, quantity_in_stock,
+                reorder_level, expiry_date, is_low_schedule, is_demo,
+                (quantity_in_stock <= reorder_level) AS is_low_stock,
+                (expiry_date IS NOT NULL AND expiry_date < CURRENT_DATE)
+                    AS is_expired
+         FROM medicines' . str_replace('medicine.', '', $where) . '
+         ORDER BY medicine_name
+         LIMIT 500'
+    );
+    $statement->execute($parameters);
+    $medicines = array_map(static function (array $medicine): array {
+        return [
+            'medicine_id' => (int) $medicine['medicine_id'],
+            'medicine_name' => $medicine['medicine_name'],
+            'unit_price' => (string) $medicine['unit_price'],
+            'quantity_in_stock' => (string) $medicine['quantity_in_stock'],
+            'reorder_level' => (string) $medicine['reorder_level'],
+            'expiry_date' => $medicine['expiry_date'],
+            'is_low_schedule' => (bool) $medicine['is_low_schedule'],
+            'is_demo' => (bool) $medicine['is_demo'],
+            'is_low_stock' => (bool) $medicine['is_low_stock'],
+            'is_expired' => (bool) $medicine['is_expired'],
+        ];
+    }, $statement->fetchAll());
+    recordPharmacyAudit(
+        $database,
+        (int) $user['user_id'],
+        'pharmacy.inventory.viewed',
+        null,
+        null
+    );
+    jsonSuccess('Pharmacy inventory loaded.', [
+        'medicines' => $medicines,
+        'count' => count($medicines),
+    ]);
+}
+
+function handlePharmacyStockMovementCreate(string $medicineId): void
+{
+    if (!ctype_digit($medicineId) || (int) $medicineId < 1) {
+        jsonError('A valid medicine ID is required.', [], 422);
+    }
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    requireCsrfRequest();
+    $input = readJsonRequest();
+    $movementType = $input['movement_type'] ?? null;
+    $quantityValue = $input['quantity'] ?? null;
+    $notes = $input['notes'] ?? null;
+    $expiryDate = $input['expiry_date'] ?? null;
+    if (!is_string($movementType)
+        || !in_array($movementType, ['received', 'adjustment'], true)
+        || (!is_string($quantityValue) && !is_int($quantityValue)
+            && !is_float($quantityValue))
+        || !preg_match('/^-?[0-9]+(?:\.[0-9]{1,2})?$/', (string) $quantityValue)
+        || !is_finite((float) $quantityValue)
+        || (float) $quantityValue === 0.0
+        || ($movementType === 'received' && (float) $quantityValue < 0)
+        || !is_string($notes)
+        || trim($notes) === ''
+        || strlen($notes) > 1000
+        || ($expiryDate !== null && $expiryDate !== ''
+            && (!is_string($expiryDate)
+                || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiryDate)
+                || !checkdate(
+                    (int) substr($expiryDate, 5, 2),
+                    (int) substr($expiryDate, 8, 2),
+                    (int) substr($expiryDate, 0, 4)
+                )
+                || $expiryDate < date('Y-m-d')))) {
+        jsonError('Enter a valid stock movement, quantity, reason and expiry date.', [
+            'quantity' => 'Use a non-zero quantity with at most two decimals.',
+            'notes' => 'A reason or stock reference is required.',
+        ], 422);
+    }
+    if ($movementType === 'received' && (float) $quantityValue <= 0) {
+        jsonError('Received stock quantity must be greater than zero.', [], 422);
+    }
+    try {
+        $database->beginTransaction();
+        $medicineStatement = $database->prepare(
+            'SELECT medicine_id, quantity_in_stock, expiry_date, is_active
+             FROM medicines
+             WHERE medicine_id = :medicine_id
+             LIMIT 1 FOR UPDATE'
+        );
+        $medicineStatement->execute(['medicine_id' => (int) $medicineId]);
+        $medicine = $medicineStatement->fetch();
+        if ($medicine === false) {
+            $database->rollBack();
+            jsonError('Medicine not found.', [], 404);
+        }
+        if (!(bool) $medicine['is_active']) {
+            $database->rollBack();
+            jsonError('Inactive medicines cannot receive stock changes.', [], 409);
+        }
+        $change = (float) $quantityValue;
+        $stockAfter = (float) $medicine['quantity_in_stock'] + $change;
+        if ($stockAfter < 0) {
+            $database->rollBack();
+            jsonError('Stock adjustment cannot reduce inventory below zero.', [
+                'quantity' => 'Reduce the adjustment quantity.',
+            ], 409);
+        }
+        $expiryDate = is_string($expiryDate) && $expiryDate !== ''
+            ? $expiryDate
+            : null;
+        $update = $database->prepare(
+            'UPDATE medicines
+             SET quantity_in_stock = :quantity_in_stock,
+                 expiry_date = COALESCE(:expiry_date, expiry_date)
+             WHERE medicine_id = :medicine_id'
+        );
+        $update->execute([
+            'quantity_in_stock' => number_format($stockAfter, 2, '.', ''),
+            'expiry_date' => $expiryDate,
+            'medicine_id' => (int) $medicineId,
+        ]);
+        $movement = $database->prepare(
+            'INSERT INTO pharmacy_stock_movements
+                (medicine_id, recorded_by_user_id, movement_type,
+                 quantity_change, stock_after, notes)
+             VALUES (:medicine_id, :user_id, :movement_type,
+                     :quantity_change, :stock_after, :notes)'
+        );
+        $movement->execute([
+            'medicine_id' => (int) $medicineId,
+            'user_id' => (int) $user['user_id'],
+            'movement_type' => $movementType,
+            'quantity_change' => number_format($change, 2, '.', ''),
+            'stock_after' => number_format($stockAfter, 2, '.', ''),
+            'notes' => trim($notes),
+        ]);
+        recordPharmacyAudit(
+            $database,
+            (int) $user['user_id'],
+            'pharmacy.stock.' . $movementType,
+            null,
+            null
+        );
+        $database->commit();
+    } catch (Throwable $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        error_log('Pharmacy stock movement failed: ' . $exception->getMessage());
+        jsonError('Unable to save the stock movement right now.', [], 500);
+    }
+    jsonSuccess('Stock movement recorded.', [
+        'medicine_id' => (int) $medicineId,
+        'quantity_change' => number_format($change, 2, '.', ''),
+        'stock_after' => number_format($stockAfter, 2, '.', ''),
+    ], 201);
+}
+
+function handlePharmacyStockMovementsGet(): void
+{
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    $statement = $database->query(
+        'SELECT movement.stock_movement_id, movement.medicine_id,
+                medicine.medicine_name, movement.movement_type,
+                movement.quantity_change, movement.stock_after,
+                movement.notes, movement.created_at,
+                recorder.display_name AS recorded_by
+         FROM pharmacy_stock_movements movement
+         INNER JOIN medicines medicine ON medicine.medicine_id = movement.medicine_id
+         INNER JOIN users recorder
+            ON recorder.user_id = movement.recorded_by_user_id
+         ORDER BY movement.created_at DESC, movement.stock_movement_id DESC
+         LIMIT 250'
+    );
+    recordPharmacyAudit(
+        $database,
+        (int) $user['user_id'],
+        'pharmacy.stock_history.viewed',
+        null,
+        null
+    );
+    jsonSuccess('Pharmacy stock history loaded.', [
+        'movements' => array_map(static function (array $movement): array {
+            return [
+                'stock_movement_id' => (int) $movement['stock_movement_id'],
+                'medicine_id' => (int) $movement['medicine_id'],
+                'medicine_name' => $movement['medicine_name'],
+                'movement_type' => $movement['movement_type'],
+                'quantity_change' => (string) $movement['quantity_change'],
+                'stock_after' => (string) $movement['stock_after'],
+                'notes' => $movement['notes'],
+                'created_at' => $movement['created_at'],
+                'recorded_by' => $movement['recorded_by'],
+            ];
+        }, $statement->fetchAll()),
+    ]);
+}
+
+function handlePharmacyReportsGet(): void
+{
+    $database = getDatabaseConnection();
+    $user = requirePharmacyAccess($database);
+    $statement = $database->query(
+        'SELECT
+            COUNT(*) AS dispensing_count,
+            COUNT(DISTINCT prescription_id) AS prescription_count,
+            COALESCE(SUM((
+                SELECT COUNT(*)
+                FROM dispensing_items item
+                WHERE item.dispensing_id = dispensing.dispensing_id
+            )), 0) AS dispensed_item_count
+         FROM dispensings dispensing
+         WHERE DATE(dispensing.dispensed_at) = CURRENT_DATE'
+    );
+    $summary = $statement->fetch();
+    recordPharmacyAudit(
+        $database,
+        (int) $user['user_id'],
+        'pharmacy.reports.viewed',
+        null,
+        null
+    );
+    jsonSuccess('Pharmacy report loaded.', [
+        'dispensed_today' => (int) $summary['dispensing_count'],
+        'prescriptions_today' => (int) $summary['prescription_count'],
+        'items_today' => (int) $summary['dispensed_item_count'],
     ]);
 }

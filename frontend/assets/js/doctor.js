@@ -488,6 +488,14 @@
                 `Prescription #${prescription.prescription_id} · ${label(prescription.status)}`,
                 [
                     `Prescribed by: ${prescription.prescribed_by || '—'} · ${formatDateTime(prescription.created_at)}`,
+                    prescription.dispensed_at
+                        ? `Dispensed ${formatDateTime(prescription.dispensed_at)}`
+                        : prescription.pharmacy_verified_at
+                            ? `Verified by pharmacy: ${prescription.verified_by || '—'} · ${formatDateTime(prescription.pharmacy_verified_at)}`
+                            : 'Not yet verified or dispensed by pharmacy',
+                    prescription.dispensing_notes
+                        ? `Pharmacy note: ${prescription.dispensing_notes}`
+                        : '',
                     ...prescription.items.map((item) => [
                         `${item.medicine_name} · ${item.quantity}`,
                         item.dosage,

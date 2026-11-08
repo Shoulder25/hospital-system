@@ -196,7 +196,18 @@
             ['Patient history', 'therapy/history.php', 'Therapy'],
         ],
         pharmacist: [
-            ['Pharmacy', 'pharmacy/index.php', 'Pharmacy'],
+            ['Pharmacy dashboard', 'pharmacy/index.php', 'Pharmacy'],
+            ['Incoming prescriptions', 'pharmacy/prescriptions.php', 'Pharmacy'],
+            ['Pending prescriptions', 'pharmacy/pending.php', 'Pharmacy'],
+            ['Pharmacy patients', 'pharmacy/patients.php', 'Pharmacy'],
+            ['Prescription details', 'pharmacy/prescription-details.php', 'Pharmacy'],
+            ['Dispensing', 'pharmacy/dispensing.php', 'Pharmacy'],
+            ['Medicine inventory', 'pharmacy/inventory.php', 'Pharmacy'],
+            ['Record stock received', 'pharmacy/stock-entry.php', 'Pharmacy'],
+            ['Low-stock and expiry alerts', 'pharmacy/stock-alerts.php', 'Pharmacy'],
+            ['Pharmacy payments', 'pharmacy/payments.php', 'Pharmacy'],
+            ['Prescription history', 'pharmacy/history.php', 'Pharmacy'],
+            ['Pharmacy reports', 'pharmacy/reports.php', 'Pharmacy'],
         ],
     };
     const adminModules = [
@@ -260,6 +271,17 @@
         ['Completed therapy cases', 'therapy/completed.php', 'Therapy'],
         ['Therapy patient history', 'therapy/history.php', 'Therapy'],
         ['Pharmacy', 'pharmacy/index.php', 'Pharmacy'],
+        ['Incoming prescriptions', 'pharmacy/prescriptions.php', 'Pharmacy'],
+        ['Pending prescriptions', 'pharmacy/pending.php', 'Pharmacy'],
+        ['Pharmacy patients', 'pharmacy/patients.php', 'Pharmacy'],
+        ['Prescription details', 'pharmacy/prescription-details.php', 'Pharmacy'],
+        ['Dispensing', 'pharmacy/dispensing.php', 'Pharmacy'],
+        ['Medicine inventory', 'pharmacy/inventory.php', 'Pharmacy'],
+        ['Record stock received', 'pharmacy/stock-entry.php', 'Pharmacy'],
+        ['Low-stock and expiry alerts', 'pharmacy/stock-alerts.php', 'Pharmacy'],
+        ['Pharmacy payments', 'pharmacy/payments.php', 'Pharmacy'],
+        ['Prescription history', 'pharmacy/history.php', 'Pharmacy'],
+        ['Pharmacy reports', 'pharmacy/reports.php', 'Pharmacy'],
     ];
 
     function addLink(nav, label, href, icon) {
@@ -271,7 +293,9 @@
         symbol.setAttribute('aria-hidden', 'true');
         symbol.textContent = icon;
         link.append(symbol, document.createTextNode(` ${label}`));
-        if (target.pathname === window.location.pathname) {
+        const isReceiptPage = window.location.pathname.endsWith('/pharmacy/receipt.php')
+            && target.pathname.endsWith('/pharmacy/payments.php');
+        if (target.pathname === window.location.pathname || isReceiptPage) {
             link.classList.add('active');
             link.setAttribute('aria-current', 'page');
         }
