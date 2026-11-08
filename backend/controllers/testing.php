@@ -79,7 +79,7 @@ function testingOrderRows(
         }
         $departmentFilter = ' AND ('
             . implode(' OR ', $validDepartmentConditions) . ')';
-    } else {
+    } elseif ($action !== 'initialize') {
         if (!isset($departments[$scope])) {
             jsonError('Unknown testing department.', [], 404);
         }
@@ -408,17 +408,6 @@ function handleTestingDeskRoute(string $orderId): void
             $database->rollBack();
             jsonError('This test order has already been routed.', [], 409);
         }
-        if ($department === 'laboratory') {
-            $specimenStatement = $database->prepare(
-                'INSERT INTO lab_specimens
-                    (test_order_id, status, recorded_by_user_id, updated_by_user_id)
-                 VALUES (:order_id, \'awaiting_collection\', :user_id, :user_id)'
-            );
-            $specimenStatement->execute([
-                'order_id' => (int) $orderId,
-                'user_id' => (int) $user['user_id'],
-            ]);
-        }
         recordTestingAudit(
             $database,
             (int) $user['user_id'],
@@ -484,6 +473,17 @@ function handleTestingOrderStart(string $department, string $orderId): void
             $database->rollBack();
             jsonError('This test order is no longer available to start.', [], 409);
         }
+        if ($department === 'laboratory') {
+            $specimenStatement = $database->prepare(
+                'INSERT INTO lab_specimens
+                    (test_order_id, status, recorded_by_user_id, updated_by_user_id)
+                 VALUES (:order_id, \'awaiting_collection\', :user_id, :user_id)'
+            );
+            $specimenStatement->execute([
+                'order_id' => (int) $orderId,
+                'user_id' => (int) $user['user_id'],
+            ]);
+        }
         recordTestingAudit(
             $database,
             (int) $user['user_id'],
@@ -518,9 +518,15 @@ function handleLaboratorySpecimenUpdate(string $orderId): void
     $input = readJsonRequest();
     $action = $input['action'] ?? null;
     if (!is_string($action)
-        || !in_array($action, ['collect', 'processing', 'reject', 'recollect'], true)) {
+        || !in_array($action, [
+            'initialize',
+            'collect',
+            'processing',
+            'reject',
+            'recollect',
+        ], true)) {
         jsonError('Choose a valid specimen action.', [
-            'action' => 'Select collect, processing, reject, or recollect.',
+            'action' => 'Select initialize, collect, processing, reject, or recollect.',
         ], 422);
     }
 
@@ -570,13 +576,34 @@ function handleLaboratorySpecimenUpdate(string $orderId): void
         $latestStatement->execute(['order_id' => (int) $orderId]);
         $specimen = $latestStatement->fetch();
         if ($specimen === false) {
+            if ($action !== 'initialize') {
+                $database->rollBack();
+                jsonError('No specimen collection attempt exists for this order.', [], 409);
+            }
+            $insertStatement = $database->prepare(
+                'INSERT INTO lab_specimens
+                    (test_order_id, status, recorded_by_user_id, updated_by_user_id)
+                 VALUES (:order_id, \'awaiting_collection\', :user_id, :user_id)'
+            );
+            $insertStatement->execute([
+                'order_id' => (int) $orderId,
+                'user_id' => (int) $user['user_id'],
+            ]);
+            $specimenId = (int) $database->lastInsertId();
+            $specimenStatus = 'awaiting_collection';
+            $specimen = null;
+        }
+
+        if ($action === 'initialize' && $specimen !== null) {
             $database->rollBack();
-            jsonError('No specimen collection attempt exists for this order.', [], 409);
+            jsonError('Specimen tracking has already been initialized.', [], 409);
         }
 
         $userId = (int) $user['user_id'];
-        $specimenId = (int) $specimen['lab_specimen_id'];
-        $specimenStatus = $specimen['status'];
+        if ($specimen !== null) {
+            $specimenId = (int) $specimen['lab_specimen_id'];
+            $specimenStatus = $specimen['status'];
+        }
         if ($action === 'recollect') {
             if ($specimenStatus !== 'rejected') {
                 $database->rollBack();
