@@ -318,20 +318,6 @@ function handleEmergencyEncounterCreate(string $visitId): void
             jsonError('An emergency encounter already exists for this visit.', [], 409);
         }
 
-        $feeStatement = $database->prepare(
-            'SELECT default_amount
-             FROM fee_catalog
-             WHERE fee_code = :fee_code AND is_active = 1
-             LIMIT 1
-             FOR UPDATE'
-        );
-        $feeStatement->execute(['fee_code' => 'EMERGENCY_CARE_DEMO']);
-        $fee = $feeStatement->fetch();
-        if ($fee === false || (float) $fee['default_amount'] <= 0) {
-            $database->rollBack();
-            jsonError('The active emergency care fee is not configured.', [], 503);
-        }
-
         $encounterInsert = $database->prepare(
             'INSERT INTO emergency_encounters
                 (visit_id, emergency_doctor_id, triage_level, stabilization_notes)
@@ -347,18 +333,6 @@ function handleEmergencyEncounterCreate(string $visitId): void
                 : null,
         ]);
         $encounterId = (int) $database->lastInsertId();
-
-        $bill = billingGetOrCreateBill($database, (int) $visitId);
-        $emergencyItem = billingAddFeeItemOnce(
-            $database,
-            (int) $bill['bill_id'],
-            'EMERGENCY_CARE_DEMO',
-            'emergency',
-            null,
-            null,
-            $encounterId
-        );
-        billingRefreshBillTotal($database, (int) $bill['bill_id']);
         recordEmergencyAudit(
             $database,
             (int) $user['user_id'],
@@ -375,11 +349,12 @@ function handleEmergencyEncounterCreate(string $visitId): void
         jsonError('Unable to start the emergency encounter right now.', [], 500);
     }
 
-    jsonSuccess('Emergency encounter started and charge deferred to pharmacy.', [
+    jsonSuccess('Emergency encounter started; charges will be resolved at Pharmacy.', [
         'emergency_encounter_id' => $encounterId,
         'visit_id' => (int) $visitId,
-        'emergency_charge' => $emergencyItem['unit_amount'],
-        'charge_created' => $emergencyItem['created'],
+        'emergency_charge' => null,
+        'charge_created' => false,
+        'charge_deferred' => true,
         'payment_collected' => false,
     ], 201);
 }

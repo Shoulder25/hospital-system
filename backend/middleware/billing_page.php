@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/auth.php';
 
-function requireBillingPage(): array
+function requireBillingPage(bool $allowReception = false): array
 {
     try {
         startSecureSession();
@@ -31,9 +31,13 @@ function requireBillingPage(): array
         exit;
     }
 
-    if (!in_array($user['role_name'], ['cashier', 'system_administrator'], true)) {
+    $allowedRoles = ['cashier', 'system_administrator'];
+    if ($allowReception) {
+        $allowedRoles[] = 'receptionist';
+    }
+    if (!in_array($user['role_name'], $allowedRoles, true)) {
         http_response_code(403);
-        exit('Cashier or system administrator access is required.');
+        exit('Billing access is not authorized.');
     }
 
     return [

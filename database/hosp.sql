@@ -79,6 +79,8 @@ CREATE TABLE IF NOT EXISTS visits (
     visit_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     patient_id INT UNSIGNED NOT NULL,
     arrived_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    reason_for_visit VARCHAR(500) NULL,
+    reception_notes TEXT NULL,
     is_emergency TINYINT(1) NOT NULL DEFAULT 0,
     medication_collection_only TINYINT(1) NOT NULL DEFAULT 0,
     visit_source ENUM('walk_in', 'school_appointment', 'referral') NOT NULL
@@ -99,10 +101,13 @@ CREATE TABLE IF NOT EXISTS visits (
         'completed',
         'cancelled'
     ) NOT NULL DEFAULT 'registered',
+    nursing_assigned_to_user_id INT UNSIGNED NULL,
+    nursing_started_at DATETIME NULL,
     created_by_user_id INT UNSIGNED NULL,
     PRIMARY KEY (visit_id),
     KEY idx_visits_patient_arrived (patient_id, arrived_at),
     KEY idx_visits_status (status),
+    KEY idx_visits_nursing_assignment (status, nursing_assigned_to_user_id),
     KEY idx_visits_arrived_at (arrived_at),
     CONSTRAINT fk_visits_patient
         FOREIGN KEY (patient_id) REFERENCES patients (patient_id),
@@ -111,6 +116,34 @@ CREATE TABLE IF NOT EXISTS visits (
         REFERENCES organizations (organization_id)
         ON DELETE SET NULL,
     CONSTRAINT fk_visits_created_by
+        FOREIGN KEY (created_by_user_id) REFERENCES users (user_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_visits_nursing_assignee
+        FOREIGN KEY (nursing_assigned_to_user_id) REFERENCES users (user_id)
+        ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS appointments (
+    appointment_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    patient_id INT UNSIGNED NOT NULL,
+    scheduled_at DATETIME NOT NULL,
+    reason VARCHAR(500) NOT NULL,
+    status ENUM('scheduled', 'arrived', 'cancelled') NOT NULL DEFAULT 'scheduled',
+    visit_id INT UNSIGNED NULL,
+    created_by_user_id INT UNSIGNED NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (appointment_id),
+    UNIQUE KEY uq_appointments_visit (visit_id),
+    KEY idx_appointments_scheduled_status (scheduled_at, status),
+    KEY idx_appointments_patient_schedule (patient_id, scheduled_at),
+    CONSTRAINT fk_appointments_patient
+        FOREIGN KEY (patient_id) REFERENCES patients (patient_id),
+    CONSTRAINT fk_appointments_visit
+        FOREIGN KEY (visit_id) REFERENCES visits (visit_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_appointments_created_by
         FOREIGN KEY (created_by_user_id) REFERENCES users (user_id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB;
@@ -452,10 +485,18 @@ CREATE TABLE IF NOT EXISTS fee_catalog (
     fee_code VARCHAR(60) NOT NULL,
     description VARCHAR(180) NOT NULL,
     default_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    currency_code CHAR(3) NOT NULL DEFAULT 'SZL',
     is_demo TINYINT(1) NOT NULL DEFAULT 0,
     is_active TINYINT(1) NOT NULL DEFAULT 1,
+    cashier_addable TINYINT(1) NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+    updated_by_user_id INT UNSIGNED NULL,
     PRIMARY KEY (fee_id),
-    UNIQUE KEY uq_fee_catalog_code (fee_code)
+    UNIQUE KEY uq_fee_catalog_code (fee_code),
+    CONSTRAINT fk_fee_catalog_updated_by
+        FOREIGN KEY (updated_by_user_id) REFERENCES users (user_id)
+        ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS bills (
@@ -497,8 +538,14 @@ CREATE TABLE IF NOT EXISTS bill_items (
     therapy_session_id INT UNSIGNED NULL,
     outside_referral_id INT UNSIGNED NULL,
     emergency_encounter_id INT UNSIGNED NULL,
+    client_request_id CHAR(36) NULL,
+    created_by_user_id INT UNSIGNED NULL,
+    is_voided TINYINT(1) NOT NULL DEFAULT 0,
+    voided_at DATETIME NULL,
+    voided_by_user_id INT UNSIGNED NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (bill_item_id),
+    UNIQUE KEY uq_bill_items_client_request (client_request_id),
     KEY idx_bill_items_bill (bill_id),
     KEY idx_bill_items_test_order (test_order_id),
     KEY idx_bill_items_prescription_item (prescription_item_id),
@@ -533,6 +580,12 @@ CREATE TABLE IF NOT EXISTS bill_items (
     CONSTRAINT fk_bill_items_emergency_encounter
         FOREIGN KEY (emergency_encounter_id)
         REFERENCES emergency_encounters (emergency_encounter_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_bill_items_created_by
+        FOREIGN KEY (created_by_user_id) REFERENCES users (user_id)
+        ON DELETE SET NULL,
+    CONSTRAINT fk_bill_items_voided_by
+        FOREIGN KEY (voided_by_user_id) REFERENCES users (user_id)
         ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

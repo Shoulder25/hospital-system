@@ -6,7 +6,9 @@
     <meta name="theme-color" content="#f5f8fa">
     <title>Dashboard | Hospital Patient Processing</title>
     <link rel="stylesheet" href="assets/css/auth.css">
+    <link rel="stylesheet" href="assets/css/staff-layout.css">
     <script src="assets/js/auth.js" defer></script>
+    <script src="assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page" data-page="dashboard">
     <div class="dashboard-layout">

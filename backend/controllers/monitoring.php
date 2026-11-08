@@ -142,6 +142,7 @@ function monitoringVisitEvents(PDO $database, int $visitId): array
                 (SELECT COALESCE(SUM(item.quantity * item.unit_amount), 0)
                  FROM bill_items item
                  WHERE item.bill_id = bill.bill_id
+                   AND item.is_voided = 0
                    AND item.charge_type = \'ticket\') AS ticket_total
          FROM bills bill
          WHERE bill.visit_id = :visit_id

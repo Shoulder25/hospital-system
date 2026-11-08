@@ -76,6 +76,224 @@ function handleAdminRolesGet(): void
     jsonSuccess('Roles loaded.', ['roles' => $roles]);
 }
 
+function adminFeeResponse(array $fee): array
+{
+    return [
+        'fee_id' => (int) $fee['fee_id'],
+        'fee_code' => $fee['fee_code'],
+        'description' => $fee['description'],
+        'amount' => (string) $fee['default_amount'],
+        'currency' => $fee['currency_code'],
+        'is_demo' => (bool) $fee['is_demo'],
+        'is_active' => (bool) $fee['is_active'],
+        'cashier_addable' => (bool) $fee['cashier_addable'],
+        'updated_at' => $fee['updated_at'],
+        'updated_by' => $fee['updated_by'],
+    ];
+}
+
+function handleAdminFeesGet(string $search): void
+{
+    $database = getDatabaseConnection();
+    requireAdministrator($database);
+    $search = trim($search);
+    if (strlen($search) > 100) {
+        jsonError('Search text must be 100 characters or fewer.', [
+            'search' => 'Shorten the search text.',
+        ], 422);
+    }
+
+    $sql = 'SELECT fee.fee_id, fee.fee_code, fee.description,
+                   fee.default_amount, fee.currency_code, fee.is_demo,
+                   fee.is_active, fee.cashier_addable, fee.updated_at,
+                   staff.display_name AS updated_by
+            FROM fee_catalog fee
+            LEFT JOIN users staff ON staff.user_id = fee.updated_by_user_id';
+    $parameters = [];
+    if ($search !== '') {
+        $sql .= ' WHERE fee.fee_code LIKE :code_search
+                  OR fee.description LIKE :description_search';
+        $pattern = '%' . $search . '%';
+        $parameters = [
+            'code_search' => $pattern,
+            'description_search' => $pattern,
+        ];
+    }
+    $sql .= ' ORDER BY fee.is_active DESC, fee.fee_code LIMIT 250';
+    $statement = $database->prepare($sql);
+    $statement->execute($parameters);
+    $fees = array_map('adminFeeResponse', $statement->fetchAll());
+    jsonSuccess('Configured fees loaded.', ['fees' => $fees]);
+}
+
+function handleAdminFeeCreate(): void
+{
+    $database = getDatabaseConnection();
+    $admin = requireAdministrator($database);
+    requireCsrfRequest();
+    $input = readJsonRequest();
+    $feeCode = $input['fee_code'] ?? null;
+    $description = $input['description'] ?? null;
+    $amount = $input['amount'] ?? null;
+    $isActive = $input['is_active'] ?? null;
+    $cashierAddable = $input['cashier_addable'] ?? null;
+    $errors = [];
+    if (!is_string($feeCode)
+        || !preg_match('/^[A-Z][A-Z0-9_]{1,59}$/', $feeCode)) {
+        $errors['fee_code'] = 'Use 2-60 uppercase letters, numbers or underscores.';
+    }
+    if (!is_string($description) || trim($description) === ''
+        || strlen(trim($description)) > 180) {
+        $errors['description'] = 'Enter a description of no more than 180 characters.';
+    }
+    if (!is_string($amount) || !preg_match('/^\d{1,8}(?:\.\d{1,2})?$/', $amount)) {
+        $errors['amount'] = 'Enter a non-negative amount with up to two decimals.';
+    }
+    if (!is_bool($isActive) || !is_bool($cashierAddable)) {
+        $errors['status'] = 'Choose valid active and cashier-addable settings.';
+    }
+    if (is_string($feeCode) && is_bool($cashierAddable) && $cashierAddable
+        && !billingFeeAllowsCashierAdd($feeCode)) {
+        $errors['cashier_addable'] = 'Workflow-managed fees must be charged by their department.';
+    }
+    if ($errors !== []) {
+        jsonError('Please correct the fee details.', $errors, 422);
+    }
+    if ($cashierAddable && (float) $amount <= 0) {
+        jsonError('A cashier-addable service must have a positive configured price.', [
+            'amount' => 'Enter a positive amount before enabling cashier additions.',
+        ], 422);
+    }
+
+    try {
+        $database->beginTransaction();
+        $insert = $database->prepare(
+            'INSERT INTO fee_catalog
+                (fee_code, description, default_amount, is_active, cashier_addable,
+                 updated_by_user_id)
+             VALUES
+                (:fee_code, :description, :amount, :is_active, :cashier_addable,
+                 :updated_by_user_id)'
+        );
+        $insert->execute([
+            'fee_code' => $feeCode,
+            'description' => trim($description),
+            'amount' => $amount,
+            'is_active' => $isActive ? 1 : 0,
+            'cashier_addable' => $cashierAddable ? 1 : 0,
+            'updated_by_user_id' => (int) $admin['user_id'],
+        ]);
+        $feeId = (int) $database->lastInsertId();
+        $audit = $database->prepare(
+            'INSERT INTO audit_log (user_id, action)
+             VALUES (:user_id, :action)'
+        );
+        $audit->execute([
+            'user_id' => (int) $admin['user_id'],
+            'action' => 'admin.fee.created:' . $feeCode,
+        ]);
+        $database->commit();
+    } catch (PDOException $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        if (($exception->errorInfo[0] ?? $exception->getCode()) === '23000') {
+            jsonError('That fee code already exists.', [
+                'fee_code' => 'Choose a unique fee code.',
+            ], 409);
+        }
+        error_log('Administrator fee creation failed: ' . $exception->getMessage());
+        jsonError('Unable to create the fee right now.', [], 500);
+    }
+    jsonSuccess('Fee created.', ['fee_id' => $feeId], 201);
+}
+
+function handleAdminFeeUpdate(string $feeId): void
+{
+    if (!ctype_digit($feeId) || (int) $feeId < 1) {
+        jsonError('A valid fee ID is required.', [], 422);
+    }
+    $database = getDatabaseConnection();
+    $admin = requireAdministrator($database);
+    requireCsrfRequest();
+    $input = readJsonRequest();
+    $description = $input['description'] ?? null;
+    $amount = $input['amount'] ?? null;
+    $isActive = $input['is_active'] ?? null;
+    $cashierAddable = $input['cashier_addable'] ?? null;
+    $errors = [];
+    if (!is_string($description) || trim($description) === ''
+        || strlen(trim($description)) > 180) {
+        $errors['description'] = 'Enter a description of no more than 180 characters.';
+    }
+    if (!is_string($amount) || !preg_match('/^\d{1,8}(?:\.\d{1,2})?$/', $amount)) {
+        $errors['amount'] = 'Enter a non-negative amount with up to two decimals.';
+    }
+    if (!is_bool($isActive) || !is_bool($cashierAddable)) {
+        $errors['status'] = 'Choose valid active and cashier-addable settings.';
+    }
+    if ($errors !== []) {
+        jsonError('Please correct the fee details.', $errors, 422);
+    }
+    if ($cashierAddable && (float) $amount <= 0) {
+        jsonError('A cashier-addable service must have a positive configured price.', [
+            'amount' => 'Enter a positive amount before enabling cashier additions.',
+        ], 422);
+    }
+
+    try {
+        $database->beginTransaction();
+        $feeStatement = $database->prepare(
+            'SELECT fee_id, fee_code FROM fee_catalog
+             WHERE fee_id = :fee_id LIMIT 1 FOR UPDATE'
+        );
+        $feeStatement->execute(['fee_id' => (int) $feeId]);
+        $fee = $feeStatement->fetch();
+        if ($fee === false) {
+            $database->rollBack();
+            jsonError('Fee not found.', [], 404);
+        }
+        if ($cashierAddable
+            && !billingFeeAllowsCashierAdd((string) $fee['fee_code'])) {
+            $database->rollBack();
+            jsonError('Workflow-managed fees must be charged by their department.', [
+                'cashier_addable' => 'This fee code cannot be added by cashiers.',
+            ], 422);
+        }
+        $update = $database->prepare(
+            'UPDATE fee_catalog
+             SET description = :description, default_amount = :amount,
+                 is_active = :is_active, cashier_addable = :cashier_addable,
+                 updated_by_user_id = :updated_by_user_id
+             WHERE fee_id = :fee_id'
+        );
+        $update->execute([
+            'description' => trim($description),
+            'amount' => $amount,
+            'is_active' => $isActive ? 1 : 0,
+            'cashier_addable' => $cashierAddable ? 1 : 0,
+            'updated_by_user_id' => (int) $admin['user_id'],
+            'fee_id' => (int) $feeId,
+        ]);
+        $audit = $database->prepare(
+            'INSERT INTO audit_log (user_id, action)
+             VALUES (:user_id, :action)'
+        );
+        $audit->execute([
+            'user_id' => (int) $admin['user_id'],
+            'action' => 'admin.fee.updated:' . $fee['fee_code'],
+        ]);
+        $database->commit();
+    } catch (PDOException $exception) {
+        if ($database->inTransaction()) {
+            $database->rollBack();
+        }
+        error_log('Administrator fee update failed: ' . $exception->getMessage());
+        jsonError('Unable to update the fee right now.', [], 500);
+    }
+    jsonSuccess('Fee updated.', ['fee_id' => (int) $feeId]);
+}
+
 function handleAdminUserCreate(): void
 {
     $database = getDatabaseConnection();

@@ -90,6 +90,8 @@
         }
         csrfToken = payload.data.csrf_token;
         document.querySelector('[data-status-user]').textContent = user.display_name;
+        document.querySelector('[data-status-avatar]').textContent =
+            Array.from(user.display_name)[0] || '—';
         document.querySelector('[data-status-role]').textContent =
             user.role.name.replaceAll('_', ' ');
         return true;

@@ -8,6 +8,10 @@ scenarios were not run because this database lacks accounts for many required
 roles and their passwords are not available. S8 is additionally blocked by the
 missing emergency page/API. Do not describe the scenarios as tested.
 
+For normal walk-in, school-appointment, and referral arrivals, Reception now
+opens the ticket-payment panel immediately after visit creation. The existing
+Cashier queue remains available as an alternative payment point.
+
 ## Preparation
 
 1. Start Apache and MySQL in XAMPP, import `database/hosp.sql` and the required
@@ -61,10 +65,13 @@ until treatment is recorded, then changes to `awaiting_payment`.
 1. **Receptionist:** open **Reception desk**. Search/select or register a
    fictional patient. Start a standard walk-in (not emergency or
    medication-only). Status: `awaiting_ticket_payment`.
-2. **Cashier:** open **Cashier / Billing**, select the visit and record the
-   ticket payment. Status: `awaiting_nurse`.
-3. **Nurse:** open the visit, save the assessment, choose **Straight to general
-   doctor**, and submit. Status: `awaiting_doctor`.
+2. **Receptionist:** record the initial ticket payment in the arrival panel.
+   The cashier queue remains an alternative. Status: `awaiting_nurse`; the visit
+   appears in the live Nursing queue.
+3. **Nurse:** click **Start assessment**, review the patient's historical
+   records, save the current assessment, choose **Straight to general doctor**,
+   and submit. Another nurse cannot claim the same visit. Status:
+   `awaiting_doctor`.
 4. **General doctor:** open the visit, record consultation, diagnosis, and an
    active prescription. Status: `awaiting_pharmacy`.
 5. **Pharmacist:** open **Pharmacy**, pay the bill, then choose **Dispense**.
@@ -77,10 +84,11 @@ Path: `awaiting_ticket_payment` → `awaiting_nurse` → `awaiting_doctor` →
 ### S2 — Minor illness
 
 1. **Receptionist:** start a normal walk-in. Status: `awaiting_ticket_payment`.
-2. **Cashier:** pay the ticket. Status: `awaiting_nurse`.
-3. **Nurse:** save assessment, choose **Minor illness**, and record treatment
-   with an available low-schedule demo medicine. During treatment the visit
-   still shows `awaiting_nurse`; after treatment it shows `awaiting_payment`.
+2. **Receptionist or cashier:** pay the ticket. Status: `awaiting_nurse`.
+3. **Nurse:** start the assessment, save it, choose **Minor illness**, and
+   record treatment with an available low-schedule demo medicine. During
+   treatment the visit still shows `awaiting_nurse`; after treatment it shows
+   `awaiting_payment`.
 4. **Pharmacist:** record payment for the deferred treatment charge. Status:
    `completed` once the bill is paid.
 
@@ -89,11 +97,12 @@ treatment) → `awaiting_payment` → `completed`.
 
 ### S3 — Nurse-ordered tests
 
-1. **Receptionist:** start a standard visit; **Cashier:** pay the ticket.
-   Path: `awaiting_ticket_payment` → `awaiting_nurse`.
-2. **Nurse:** save assessment, choose **Tests**, and select supported types:
-   blood, glucose, urine, pregnancy, pap smear, X-ray, or ECG. Status:
-   `awaiting_tests`.
+1. **Receptionist:** start a standard visit and pay in the arrival panel
+   (or use the cashier queue). Path: `awaiting_ticket_payment` →
+   `awaiting_nurse`.
+2. **Nurse:** start and save the assessment, choose **Tests**, and select
+   supported types: blood, glucose, urine, pregnancy, pap smear, X-ray, or ECG.
+   Status: `awaiting_tests`.
 3. **Testing desk clerk:** route each order from **Testing centre desk**.
    Status remains `awaiting_tests`.
 4. **Laboratory technician**, **Radiographer**, or **Cardiac technician**:

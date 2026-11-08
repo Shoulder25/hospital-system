@@ -7,7 +7,9 @@
     <title>Visit status | Hospital Patient Processing</title>
     <link rel="stylesheet" href="assets/css/auth.css">
     <link rel="stylesheet" href="assets/css/monitoring.css">
+    <link rel="stylesheet" href="assets/css/staff-layout.css">
     <script src="assets/js/visit-status.js" defer></script>
+    <script src="assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page monitoring-page" data-page="visit-status">
     <div class="dashboard-layout">
@@ -34,6 +36,7 @@
             <header class="topbar">
                 <div class="topbar-title"><span class="mobile-brand-mark" aria-hidden="true">+</span><span>Visit status tracker</span></div>
                 <div class="topbar-actions">
+                    <span class="user-avatar" data-status-avatar aria-hidden="true">—</span>
                     <div class="user-summary"><strong data-status-user>Loading…</strong><span data-status-role>Checking session</span></div>
                     <button class="button button-outline button-logout" type="button" data-status-logout>Sign out</button>
                 </div>

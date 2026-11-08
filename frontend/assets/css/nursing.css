@@ -8,9 +8,12 @@
 .nursing-queue-panel { margin-bottom: 22px; }
 .nursing-queue-heading { align-items: flex-end; }
 .nursing-search { width: min(100%, 270px); min-height: 38px; }
-.nursing-table { min-width: 930px; }
+.nursing-table { min-width: 1180px; }
 .nursing-action-cell { min-width: 150px; }
 .nursing-action-cell .status-toggle { white-space: nowrap; }
+.nursing-queue-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.nursing-filter-label select { min-height: 38px; max-width: 190px; padding: 0 10px; border: 1px solid #dbe5e6; border-radius: 7px; background: #fff; color: #435b60; font: inherit; font-size: 11px; }
+.nursing-refresh-button { min-height: 38px; padding: 0 12px; font-size: 11px; }
 .nursing-emergency { color: #9c4146 !important; font-weight: 700; }
 .nursing-assessment-panel { margin-bottom: 28px; }
 .nursing-assessment-panel > .admin-panel-heading { align-items: center; }
@@ -25,6 +28,8 @@
 .nursing-subheading h3 { margin: 0 0 5px; color: #314a50; font-size: 14px; letter-spacing: -.2px; }
 .nursing-subheading p { margin: 0; color: #849397; font-size: 11px; line-height: 1.5; }
 .nursing-history-table { min-width: 650px; }
+.nursing-history-table td { white-space: pre-line; }
+.nursing-clinical-history { border-top: 1px solid #edf1f2; }
 .nursing-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; padding: 20px; }
 .nursing-form-heading { grid-column: 1 / -1; padding: 3px 0 0; }
 .nursing-field { min-width: 0; }
@@ -67,7 +72,11 @@
     .nursing-welcome { align-items: flex-start; }
     .nursing-date { padding: 7px 10px; }
     .nursing-queue-heading { align-items: stretch; flex-direction: column; }
+    .nursing-queue-controls { justify-content: stretch; }
     .nursing-search { width: 100%; }
+    .nursing-filter-label { flex: 1 1 100%; }
+    .nursing-filter-label select { width: 100%; max-width: none; }
+    .nursing-refresh-button { width: 100%; }
 }
 
 @media (max-width: 520px) {

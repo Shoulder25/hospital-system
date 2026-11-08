@@ -86,6 +86,74 @@ function pharmacyEnsurePrescriptionCharges(PDO $database, array $visit, array $b
     }
 }
 
+function pharmacyEnsureEmergencyCharge(
+    PDO $database,
+    array $visit,
+    array $bill,
+    array $user
+): bool {
+    if ((int) $visit['is_emergency'] !== 1) {
+        return true;
+    }
+
+    $encounterStatement = $database->prepare(
+        'SELECT emergency_encounter_id
+         FROM emergency_encounters
+         WHERE visit_id = :visit_id AND ended_at IS NOT NULL
+         LIMIT 1 FOR UPDATE'
+    );
+    $encounterStatement->execute(['visit_id' => (int) $visit['visit_id']]);
+    $encounterId = $encounterStatement->fetchColumn();
+    if ($encounterId === false) {
+        return false;
+    }
+
+    $existingStatement = $database->prepare(
+        'SELECT bill_item_id
+         FROM bill_items
+         WHERE bill_id = :bill_id AND emergency_encounter_id = :encounter_id
+           AND charge_type = \'emergency\' AND is_voided = 0
+         LIMIT 1 FOR UPDATE'
+    );
+    $existingStatement->execute([
+        'bill_id' => (int) $bill['bill_id'],
+        'encounter_id' => (int) $encounterId,
+    ]);
+    if ($existingStatement->fetchColumn() !== false) {
+        return true;
+    }
+
+    $feeStatement = $database->prepare(
+        'SELECT fee_code
+         FROM fee_catalog
+         WHERE fee_code = :fee_code AND is_active = 1 AND default_amount > 0
+         LIMIT 1 FOR UPDATE'
+    );
+    $feeStatement->execute(['fee_code' => 'EMERGENCY_CARE_DEMO']);
+    if ($feeStatement->fetchColumn() === false) {
+        return false;
+    }
+
+    billingAddFeeItemOnce(
+        $database,
+        (int) $bill['bill_id'],
+        'EMERGENCY_CARE_DEMO',
+        'emergency',
+        null,
+        null,
+        (int) $encounterId
+    );
+    recordPharmacyAudit(
+        $database,
+        (int) $user['user_id'],
+        'pharmacy.emergency_charge.added',
+        (int) $visit['patient_id'],
+        (int) $visit['visit_id']
+    );
+
+    return true;
+}
+
 function pharmacyRelatedPrescriptions(
     PDO $database,
     int $visitId,
@@ -581,6 +649,7 @@ function handlePharmacyQueueGet(string $search): void
                     FROM bill_items item
                     INNER JOIN bills visit_bill ON visit_bill.bill_id = item.bill_id
                     WHERE visit_bill.visit_id = visit.visit_id
+                      AND item.is_voided = 0
                 ), 0.00) AS billed_amount,
                 COALESCE((
                     SELECT SUM(payment.amount)
@@ -689,6 +758,14 @@ function handlePharmacyVisitGet(string $visitId): void
             jsonError('This visit is not in the pharmacy queue.', [], 409);
         }
         $bill = billingGetOrCreateBill($database, (int) $visitId);
+        if (!pharmacyEnsureEmergencyCharge($database, $visit, $bill, $user)) {
+            $database->rollBack();
+            jsonError(
+                'Emergency service pricing is unavailable at Pharmacy; no treatment was blocked.',
+                [],
+                503
+            );
+        }
         pharmacyEnsurePrescriptionCharges($database, $visit, $bill);
         billingRefreshBillTotal($database, (int) $bill['bill_id']);
         $balance = billingGetBillBalance($database, (int) $bill['bill_id']);
@@ -1023,6 +1100,14 @@ function handlePharmacyPaymentCreate(string $visitId): void
             jsonError('This visit is not awaiting pharmacy payment.', [], 409);
         }
         $bill = billingGetOrCreateBill($database, (int) $visitId);
+        if (!pharmacyEnsureEmergencyCharge($database, $visit, $bill, $user)) {
+            $database->rollBack();
+            jsonError(
+                'Emergency-care pricing or encounter completion is missing; configure the charge before accepting payment.',
+                [],
+                503
+            );
+        }
         pharmacyEnsurePrescriptionCharges($database, $visit, $bill);
         $billTotal = billingRefreshBillTotal($database, (int) $bill['bill_id']);
         $balance = billingGetBillBalance($database, (int) $bill['bill_id']);

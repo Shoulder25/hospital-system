@@ -15,6 +15,10 @@ are required.
    - `HOSPITAL_DB_PASSWORD` (required if your MySQL account has a password)
    - `HOSPITAL_DB_HOST` (optional; defaults to `127.0.0.1`)
    - `HOSPITAL_DB_PORT` (optional; defaults to `3306`)
+   Alternatively, create `backend/config/database.local.php` returning an
+   array with `host`, `port`, `database`, `username`, and `password`. This
+   machine-local file is ignored by Git; do not commit it. Environment
+   variables override matching local settings.
 4. Keep database credentials out of the repository and any public web file.
    Restart Apache after changing environment variables.
 5. Public registration is disabled in the application configuration. Existing

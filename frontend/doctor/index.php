@@ -25,7 +25,9 @@ $roleLabel = str_replace('_', ' ', (string) $staff['role_name']);
     <link rel="stylesheet" href="../assets/css/auth.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
     <link rel="stylesheet" href="../assets/css/doctor.css">
+    <link rel="stylesheet" href="../assets/css/staff-layout.css">
     <script src="../assets/js/doctor.js" defer></script>
+    <script src="../assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page admin-page doctor-page" data-base-path="<?= $escape($basePath) ?>">
     <div class="dashboard-layout">

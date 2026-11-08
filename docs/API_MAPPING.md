@@ -12,6 +12,7 @@ does not treat the proposal as final. Routes are dispatched through
 | Administration | `GET /api/users` | `GET /api/admin/users` | Implemented; admin-only, different path |
 | Administration | `POST /api/users` | `POST /api/admin/users` | Implemented; admin-only, different path/contract |
 | Administration | `PUT /api/users/{id}` | `PATCH /api/admin/users/{id}/status` | Status-only; general update not implemented |
+| Administration | — | `GET/POST /api/admin/fees`; `PATCH /api/admin/fees/{id}` | Fee-catalog management; administrator-only |
 | Reception | `POST /api/patients` | `POST /api/reception/patients` | Implemented; different path |
 | Reception | `GET /api/patients` | `GET /api/reception/patients` | Implemented; different path |
 | Reception | `GET /api/patients/{id}` | `GET /api/reception/patients/{id}` | Implemented; different path |
@@ -49,7 +50,7 @@ does not treat the proposal as final. Routes are dispatched through
 | Emergency | No corresponding route identified in the supplied proposal | `GET /api/emergency/queue`; `GET /api/emergency/visits/{id}`; `POST /api/emergency/visits/{id}/encounter`; `POST /api/emergency/visits/{id}/nurses`; `POST /api/emergency/visits/{id}/prescription`; `POST /api/emergency/visits/{id}/finish` | Current emergency paths are provisional |
 
 Additional current routes include health/session helpers, admin roles/audit
-log/reports, visit status, reception dashboard/organizations,
+log/reports and fee management, visit status, reception dashboard/organizations,
 `GET /api/billing/ticket-queue` (with `/api/billing/queue` retained as an alias),
 `GET /api/billing/visits/{id}` for cashier ticket-payment details, nursing and
 doctor dashboards/queues, department order routing/start actions,
@@ -59,6 +60,13 @@ medication-only prescription selection, and pharmacy receipts. Pharmacy
 payment requests require a client UUID for idempotent retries. See
 `backend/routes/api.php` for the exact route patterns and methods.
 
+Billing provides cashier itemization at `GET /api/billing/visits/{id}/bill`,
+`POST /api/billing/bills/{id}/items` for explicitly enabled standalone catalog
+fees, and `DELETE /api/billing/bills/{id}/items/{item_id}` to void eligible
+unpaid cashier-added items without deleting their history. The server resolves
+prices from `fee_catalog`; department-managed charges remain attached to their
+existing workflows and source records.
+
 The Therapy API also provides `GET /api/therapy/referrals/{id}` for an
 authorized referral's clinical record and session history. Session writes use
 a client request UUID so retries do not duplicate a session or its linked bill
@@ -66,7 +74,12 @@ item.
 
 Doctor record reads use `GET /api/doctor/visits/{id}` and
 `GET /api/doctor/visits/{id}/history`. Nursing uses
+`POST /api/nursing/visits/{id}/start` to claim an awaiting visit,
 `POST /api/nursing/visits/{id}/assessment`, `/decision`, and `/minor-treatment`.
+Nursing queue assignment filters are available at
+`GET /api/nursing/queue?search=&filter=`; active-nurse selection is available
+to administrators at `GET /api/nursing/nurses`, and visit reassignment uses
+`POST /api/nursing/visits/{id}/reassign`.
 Doctor writes use `POST /api/consultations`, `/api/diagnoses`, and
 `/api/prescriptions`; the diagnosis request carries the selected test,
 specialist-referral, or therapy next step.

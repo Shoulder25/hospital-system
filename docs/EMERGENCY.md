@@ -9,10 +9,12 @@ workflow.
 
 An emergency doctor opens an active emergency visit and starts one encounter
 with a triage level and stabilization notes. In that transaction, the system
-records the authenticated doctor, creates or reuses the visit bill, adds the
-active `EMERGENCY_CARE_DEMO` fee item linked to that encounter, refreshes the
-bill total, and writes an audit entry. The encounter's charge is deferred; the
-Emergency Department never collects payment and does not add a ticket fee.
+records the authenticated doctor and writes an audit entry. Starting treatment
+does not depend on a ticket, cashier approval, bill creation, or configured
+emergency fee. When Pharmacy opens the finished visit, it adds the active
+`EMERGENCY_CARE_DEMO` fee item linked to the encounter to the consolidated
+bill. The Emergency Department never collects payment and does not add a ticket
+fee.
 
 The emergency doctor can assign active users with the `emergency_nurse` role.
 Duplicate assignments are rejected. The doctor may also create one active
@@ -64,15 +66,18 @@ demo emergency fee already exist in the schema.
 3. Open Emergency Department from the dashboard. Confirm the visit is in the
    queue and temporary patients are labelled.
 4. Open the visit, enter a triage level and stabilization notes, then start the
-   encounter. Confirm the encounter and deferred emergency charge are saved.
+   encounter. Confirm the doctor and encounter are saved without a ticket or
+   payment and treatment can continue.
 5. Assign an active emergency nurse. Try assigning the same nurse again and
    confirm the duplicate is rejected.
 6. Optionally select an active demo medicine and save a prescription. Confirm
    the UI says it is for Pharmacy and was not dispensed.
 7. Finish the encounter. Confirm the status is `awaiting_pharmacy` with an
    active prescription, or `awaiting_payment` without one.
-8. Sign in as Pharmacist and confirm the visit and emergency charge are
-   available at the pharmacy payment point.
+8. Sign in as Pharmacist and open the finished visit. Confirm its configured
+   emergency charge is added to the bill at the pharmacy payment point. If the
+   fee is unavailable, encounter creation and emergency care still work; the
+   pharmacy cannot settle the missing charge until it is configured.
 9. Confirm no ticket charge or Emergency Department payment was recorded.
 
 ## Postman testing

@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../backend/middleware/specialist_page.php';
 $context = requireSpecialistPage();
+$staff = $context['user'];
 $basePath = $context['base_path'];
 $escape = static function ($value): string {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 };
+$initialMatch = [];
+preg_match('/^./us', (string) $staff['display_name'], $initialMatch);
+$initial = $initialMatch[0] ?? 'S';
 ?>
 <!doctype html>
 <html lang="en">
@@ -19,7 +23,9 @@ $escape = static function ($value): string {
     <link rel="stylesheet" href="../assets/css/auth.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
     <link rel="stylesheet" href="../assets/css/specialist.css">
+    <link rel="stylesheet" href="../assets/css/staff-layout.css">
     <script src="../assets/js/specialist.js" defer></script>
+    <script src="../assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page admin-page specialist-page outside-referral-page" data-base-path="<?= $escape($basePath) ?>" data-outside-referral-page>
     <div class="dashboard-layout">
@@ -33,7 +39,7 @@ $escape = static function ($value): string {
             <div class="sidebar-bottom"><span class="sidebar-version">Hospital Patient Processing<br>Academic prototype</span></div>
         </aside>
         <main class="dashboard-main">
-            <header class="topbar"><div class="topbar-title"><span class="mobile-brand-mark" aria-hidden="true">+</span><span>Outside referral summary</span></div><div class="topbar-actions"><button class="button button-outline button-small" type="button" data-print>Print summary</button><a class="button button-outline button-small" href="index.php">Back to referrals</a></div></header>
+            <header class="topbar"><div class="topbar-title"><span class="mobile-brand-mark" aria-hidden="true">+</span><span>Outside referral summary</span></div><div class="topbar-actions"><span class="user-avatar"><?= $escape($initial) ?></span><div class="user-summary"><strong><?= $escape($staff['display_name']) ?></strong><span><?= $escape(ucwords(str_replace('_', ' ', $staff['role_name']))) ?></span></div><button class="button button-outline button-logout" type="button" data-sign-out>Sign out</button><button class="button button-outline button-small" type="button" data-print>Print summary</button><a class="button button-outline button-small" href="index.php">Back to referrals</a></div></header>
             <section class="dashboard-content admin-content specialist-content">
                 <div class="admin-notice" data-specialist-message role="status" aria-live="polite" hidden></div>
                 <article class="admin-panel outside-letter" data-outside-letter hidden>

@@ -13,13 +13,20 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/auth/register' => ['POST'],
         '/api/auth/roles' => ['GET'],
         '/api/admin/users' => ['GET', 'POST'],
+        '/api/admin/fees' => ['GET', 'POST'],
         '/api/admin/roles' => ['GET'],
         '/api/admin/audit-log' => ['GET'],
         '/api/admin/reports' => ['GET'],
         '/api/visits/status' => ['GET'],
         '/api/billing/ticket-queue' => ['GET'],
+        '/api/billing/dashboard' => ['GET'],
+        '/api/billing/patients' => ['GET'],
         '/api/emergency/queue' => ['GET'],
         '/api/reception/dashboard' => ['GET'],
+        '/api/reception/appointments' => ['GET', 'POST'],
+        '/api/reception/arrivals' => ['GET'],
+        '/api/reception/queue' => ['GET'],
+        '/api/reception/referrals' => ['GET'],
         '/api/reception/organizations' => ['GET'],
         '/api/reception/patients' => ['GET', 'POST'],
         '/api/reception/visits' => ['POST'],
@@ -29,6 +36,9 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/pharmacy/queue' => ['GET'],
         '/api/nursing/dashboard' => ['GET'],
         '/api/nursing/queue' => ['GET'],
+        '/api/nursing/completed' => ['GET'],
+        '/api/nursing/referrals' => ['GET'],
+        '/api/nursing/nurses' => ['GET'],
         '/api/doctor/dashboard' => ['GET'],
         '/api/doctor/queue' => ['GET'],
         '/api/consultations' => ['POST'],
@@ -43,6 +53,7 @@ function dispatchApiRequest(string $method, string $path): void
         '/api/cardiac/results' => ['POST'],
     ];
     $statusUserId = null;
+    $adminFeeId = null;
     $patientId = null;
     $nursingVisitId = null;
     $nursingVisitAction = null;
@@ -54,6 +65,8 @@ function dispatchApiRequest(string $method, string $path): void
     $testingAction = null;
     $billingVisitId = null;
     $billingVisitAction = null;
+    $billingBillId = null;
+    $billingBillItemId = null;
     $billingPaymentId = null;
     $specialistReferralId = null;
     $specialistReferralAction = null;
@@ -65,9 +78,15 @@ function dispatchApiRequest(string $method, string $path): void
     $pharmacyPaymentId = null;
     $emergencyVisitId = null;
     $emergencyAction = null;
+    $receptionAppointmentId = null;
+    $receptionAppointmentAction = null;
 
     if (preg_match('#^/api/admin/users/([0-9]+)/status$#', $path, $matches)) {
         $statusUserId = $matches[1];
+        $routes[$path] = ['PATCH'];
+    }
+    if (preg_match('#^/api/admin/fees/([0-9]+)$#', $path, $matches)) {
+        $adminFeeId = $matches[1];
         $routes[$path] = ['PATCH'];
     }
     if (preg_match('#^/api/reception/patients/([0-9]+)$#', $path, $matches)) {
@@ -75,7 +94,16 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = ['GET', 'PATCH'];
     }
     if (preg_match(
-        '#^/api/nursing/visits/([0-9]+)(?:/(assessment|decision|minor-treatment))?$#',
+        '#^/api/reception/appointments/([0-9]+)(?:/(arrive))?$#',
+        $path,
+        $matches
+    )) {
+        $receptionAppointmentId = $matches[1];
+        $receptionAppointmentAction = $matches[2] ?? '';
+        $routes[$path] = $receptionAppointmentAction === '' ? ['PATCH'] : ['POST'];
+    }
+    if (preg_match(
+        '#^/api/nursing/visits/([0-9]+)(?:/(start|reassign|assessment|decision|minor-treatment))?$#',
         $path,
         $matches
     )) {
@@ -113,15 +141,32 @@ function dispatchApiRequest(string $method, string $path): void
         $routes[$path] = ['POST'];
     }
     if (preg_match(
-        '#^/api/billing/visits/([0-9]+)(?:/(ticket-payment))?$#',
+        '#^/api/billing/visits/([0-9]+)(?:/(ticket-payment|bill))?$#',
         $path,
         $matches
     )) {
         $billingVisitId = $matches[1];
         $billingVisitAction = $matches[2] ?? '';
-        $routes[$path] = $billingVisitAction === ''
-            ? ['GET']
-            : ['POST'];
+        $routes[$path] = $billingVisitAction === 'ticket-payment'
+            ? ['POST']
+            : ['GET'];
+    }
+    if (preg_match(
+        '#^/api/billing/bills/([0-9]+)/payments$#',
+        $path,
+        $matches
+    )) {
+        $billingBillId = $matches[1];
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/billing/bills/([0-9]+)/items(?:/([0-9]+))?$#',
+        $path,
+        $matches
+    )) {
+        $billingBillId = $matches[1];
+        $billingBillItemId = $matches[2] ?? null;
+        $routes[$path] = $billingBillItemId === null ? ['POST'] : ['DELETE'];
     }
     if (preg_match(
         '#^/api/billing/payments/([0-9]+)/receipt$#',
@@ -233,14 +278,28 @@ function dispatchApiRequest(string $method, string $path): void
             'GET' => 'handleAdminUsersGet',
             'POST' => 'handleAdminUserCreate',
         ],
+        '/api/admin/fees' => [
+            'GET' => 'handleAdminFeesGet',
+            'POST' => 'handleAdminFeeCreate',
+        ],
         '/api/admin/roles' => 'handleAdminRolesGet',
         '/api/admin/audit-log' => 'handleAdminAuditLogGet',
         '/api/admin/reports' => 'handleAdminReportsGet',
         '/api/visits/status' => 'handleVisitStatusGet',
         '/api/reception/dashboard' => 'handleReceptionDashboard',
+        '/api/reception/appointments' => [
+            'GET' => 'handleReceptionAppointmentsGet',
+            'POST' => 'handleReceptionAppointmentCreate',
+        ],
+        '/api/reception/arrivals' => 'handleReceptionArrivalsGet',
+        '/api/reception/queue' => 'handleReceptionQueueGet',
+        '/api/reception/referrals' => 'handleReceptionReferralsGet',
         '/api/reception/organizations' => 'handleReceptionOrganizations',
         '/api/reception/visits' => 'handleReceptionVisitCreate',
         '/api/nursing/dashboard' => 'handleNursingDashboard',
+        '/api/nursing/completed' => 'handleNursingCompletedGet',
+        '/api/nursing/referrals' => 'handleNursingReferralsGet',
+        '/api/nursing/nurses' => 'handleNursingNursesGet',
         '/api/doctor/dashboard' => 'handleDoctorDashboard',
         '/api/doctor/queue' => 'handleDoctorQueue',
         '/api/consultations' => 'handleDoctorConsultationCreate',
@@ -259,6 +318,9 @@ function dispatchApiRequest(string $method, string $path): void
         if ($statusUserId !== null) {
             handleAdminUserStatus($statusUserId);
         }
+        if ($adminFeeId !== null) {
+            handleAdminFeeUpdate($adminFeeId);
+        }
 
         if ($path === '/api/admin/users') {
             if ($method === 'GET') {
@@ -272,6 +334,32 @@ function dispatchApiRequest(string $method, string $path): void
             } else {
                 $handlers[$path][$method]();
             }
+        } elseif ($path === '/api/admin/fees') {
+            if ($method === 'GET') {
+                $search = $_GET['search'] ?? '';
+                if (!is_string($search)) {
+                    jsonError('Search text must be a string.', [
+                        'search' => 'Enter plain text to search.',
+                    ], 422);
+                }
+                handleAdminFeesGet($search);
+            } else {
+                handleAdminFeeCreate();
+            }
+        } elseif ($path === '/api/reception/appointments') {
+            $handlers[$path][$method]();
+        } elseif ($receptionAppointmentId !== null) {
+            if ($receptionAppointmentAction === 'arrive') {
+                handleReceptionAppointmentArrive($receptionAppointmentId);
+            } else {
+                handleReceptionAppointmentUpdate($receptionAppointmentId);
+            }
+        } elseif ($path === '/api/reception/arrivals') {
+            handleReceptionArrivalsGet();
+        } elseif ($path === '/api/reception/queue') {
+            handleReceptionQueueGet();
+        } elseif ($path === '/api/reception/referrals') {
+            handleReceptionReferralsGet();
         } elseif ($path === '/api/reception/patients' && $method === 'GET') {
             $search = $_GET['search'] ?? '';
             if (!is_string($search)) {
@@ -291,6 +379,10 @@ function dispatchApiRequest(string $method, string $path): void
         } elseif ($nursingVisitId !== null) {
             if ($nursingVisitAction === '') {
                 handleNursingVisitGet($nursingVisitId);
+            } elseif ($nursingVisitAction === 'start') {
+                handleNursingVisitStart($nursingVisitId);
+            } elseif ($nursingVisitAction === 'reassign') {
+                handleNursingVisitReassign($nursingVisitId);
             } elseif ($nursingVisitAction === 'assessment') {
                 handleNursingAssessmentSave($nursingVisitId);
             } elseif ($nursingVisitAction === 'decision') {
@@ -311,8 +403,18 @@ function dispatchApiRequest(string $method, string $path): void
         } elseif ($billingVisitId !== null) {
             if ($billingVisitAction === 'ticket-payment') {
                 handleBillingTicketPaymentCreate($billingVisitId);
+            } elseif ($billingVisitAction === 'bill') {
+                handleBillingVisitBillGet($billingVisitId);
             } else {
                 handleBillingVisitGet($billingVisitId);
+            }
+        } elseif ($billingBillId !== null) {
+            if ($billingBillItemId !== null) {
+                handleBillingBillItemVoid($billingBillId, $billingBillItemId);
+            } elseif (preg_match('#/items$#', $path) === 1) {
+                handleBillingBillItemCreate($billingBillId);
+            } else {
+                handleBillingPaymentCreate($billingBillId);
             }
         } elseif ($billingPaymentId !== null) {
             handleBillingReceiptGet($billingPaymentId);
@@ -380,6 +482,21 @@ function dispatchApiRequest(string $method, string $path): void
                 ], 422);
             }
             handlePharmacyQueueGet($search);
+        } elseif ($path === '/api/billing/dashboard') {
+            $from = $_GET['from'] ?? '';
+            $to = $_GET['to'] ?? '';
+            if (!is_string($from) || !is_string($to)) {
+                jsonError('Payment date filters must be strings.', [], 422);
+            }
+            handleBillingDashboardGet($from, $to);
+        } elseif ($path === '/api/billing/patients') {
+            $search = $_GET['search'] ?? '';
+            if (!is_string($search)) {
+                jsonError('Search text must be a string.', [
+                    'search' => 'Enter plain text to search.',
+                ], 422);
+            }
+            handleBillingPatientSearch($search);
         } elseif (in_array(
             $path,
             ['/api/billing/queue', '/api/billing/ticket-queue'],
@@ -431,12 +548,22 @@ function dispatchApiRequest(string $method, string $path): void
             handleDoctorQueue($search);
         } elseif ($path === '/api/nursing/queue') {
             $search = $_GET['search'] ?? '';
+            $filter = $_GET['filter'] ?? 'all';
+            if (!is_string($search) || !is_string($filter)) {
+                jsonError('Search and queue filters must be strings.', [
+                    'search' => 'Enter plain text to search.',
+                    'filter' => 'Choose a supported queue filter.',
+                ], 422);
+            }
+            handleNursingQueue($search, $filter);
+        } elseif (in_array($path, ['/api/nursing/completed', '/api/nursing/referrals'], true)) {
+            $search = $_GET['search'] ?? '';
             if (!is_string($search)) {
                 jsonError('Search text must be a string.', [
                     'search' => 'Enter plain text to search.',
                 ], 422);
             }
-            handleNursingQueue($search);
+            $handlers[$path]($search);
         } else {
             $handler = $handlers[$path] ?? null;
             if (!is_string($handler)) {

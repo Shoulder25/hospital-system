@@ -447,6 +447,132 @@
         });
     }
 
+    function renderFees(fees) {
+        const body = document.querySelector('[data-fee-rows]');
+        body.replaceChildren();
+        if (!fees.length) {
+            const row = document.createElement('tr');
+            const cell = appendCell(row, 'No configured services matched this search.', 'table-message');
+            cell.colSpan = 8;
+            body.appendChild(row);
+            return;
+        }
+        fees.forEach((fee) => {
+            const row = document.createElement('tr');
+            const code = appendCell(row, fee.fee_code, 'fee-code-cell');
+            if (fee.is_demo) code.append(document.createTextNode(' · DEMO'));
+            appendCell(row, fee.description, 'fee-service-name');
+            appendCell(row, new Intl.NumberFormat(undefined, {
+                style: 'currency',
+                currency: fee.currency,
+                currencyDisplay: 'narrowSymbol',
+            }).format(Number(fee.amount)));
+            const status = appendCell(row, '');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = `status-badge${fee.is_active ? '' : ' inactive'}`;
+            statusBadge.textContent = fee.is_active ? 'Active' : 'Inactive';
+            status.appendChild(statusBadge);
+            appendCell(row, fee.cashier_addable ? 'Enabled' : 'No');
+            appendCell(row, formatDateTime(fee.updated_at), 'fee-updated-cell');
+            appendCell(row, fee.updated_by || 'Not recorded');
+            const action = appendCell(row, '');
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'status-toggle fee-edit-button';
+            button.textContent = 'Edit';
+            button.addEventListener('click', () => editFee(fee));
+            action.appendChild(button);
+            body.appendChild(row);
+        });
+    }
+
+    async function loadFees(search = '') {
+        const { response, payload } = await request('/api/admin/fees', {
+            query: { search },
+        });
+        if (!response.ok || !payload.success) {
+            throw new Error(messageText(payload, 'Could not load configured fees.'));
+        }
+        const fees = payload.data.fees;
+        document.querySelector('[data-fee-currency]').textContent =
+            fees.length ? fees[0].currency : 'No fee currency configured';
+        renderFees(fees);
+    }
+
+    function resetFeeForm() {
+        const form = document.querySelector('[data-fee-form]');
+        form.reset();
+        form.elements.fee_id.value = '';
+        form.elements.fee_code.disabled = false;
+        form.elements.is_active.checked = true;
+        document.querySelector('[data-fee-editor-heading]').textContent = 'Add a service fee';
+        document.querySelector('[data-fee-submit]').textContent = 'Add service';
+        document.querySelector('[data-fee-cancel]').hidden = true;
+    }
+
+    function editFee(fee) {
+        const form = document.querySelector('[data-fee-form]');
+        form.elements.fee_id.value = String(fee.fee_id);
+        form.elements.fee_code.value = fee.fee_code;
+        form.elements.fee_code.disabled = true;
+        form.elements.description.value = fee.description;
+        form.elements.amount.value = fee.amount;
+        form.elements.is_active.checked = fee.is_active;
+        form.elements.cashier_addable.checked = fee.cashier_addable;
+        document.querySelector('[data-fee-editor-heading]').textContent =
+            `Edit ${fee.fee_code}`;
+        document.querySelector('[data-fee-submit]').textContent = 'Save changes';
+        document.querySelector('[data-fee-cancel]').hidden = false;
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        form.elements.description.focus();
+    }
+
+    function setupFees() {
+        const form = document.querySelector('[data-fee-form]');
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!form.reportValidity()) return;
+            const formData = new FormData(form);
+            const feeId = String(formData.get('fee_id') || '');
+            const payload = {
+                fee_code: String(formData.get('fee_code') || '').trim(),
+                description: String(formData.get('description') || '').trim(),
+                amount: String(formData.get('amount') || ''),
+                is_active: form.elements.is_active.checked,
+                cashier_addable: form.elements.cashier_addable.checked,
+            };
+            const submit = form.querySelector('[data-fee-submit]');
+            submit.disabled = true;
+            try {
+                const { response, payload: result } = await request(
+                    feeId ? `/api/admin/fees/${encodeURIComponent(feeId)}` : '/api/admin/fees',
+                    {
+                        method: feeId ? 'PATCH' : 'POST',
+                        body: JSON.stringify(payload),
+                    }
+                );
+                if (!response.ok || !result.success) {
+                    throw new Error(messageText(result, 'Could not save this fee.'));
+                }
+                resetFeeForm();
+                showMessage(feeId ? 'Fee configuration updated.' : 'Fee configuration created.', 'success');
+                await loadFees(document.querySelector('[data-fee-search]').value.trim());
+            } catch (error) {
+                showMessage(error.message);
+            } finally {
+                submit.disabled = false;
+            }
+        });
+        document.querySelector('[data-fee-cancel]').addEventListener('click', resetFeeForm);
+        document.querySelector('[data-fee-search]').addEventListener('input', (event) => {
+            window.clearTimeout(searchTimer);
+            searchTimer = window.setTimeout(() => {
+                loadFees(event.currentTarget.value.trim()).catch((error) => showMessage(error.message));
+            }, 180);
+        });
+        loadFees().catch((error) => showMessage(error.message));
+    }
+
     function setupLogout() {
         document.querySelectorAll('[data-admin-logout]').forEach((button) => {
             button.addEventListener('click', async () => {
@@ -480,6 +606,9 @@
                 setupSearch();
                 setupCreateUserForm();
                 await loadUsers();
+            }
+            if (document.body.dataset.page === 'admin-fees') {
+                setupFees();
             }
         } catch (error) {
             showMessage(error.message);

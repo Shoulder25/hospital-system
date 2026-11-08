@@ -34,6 +34,14 @@ function billingGenerateReceiptNumber(PDO $database): string
     throw new RuntimeException('Unable to generate a unique receipt number.');
 }
 
+function billingFeeAllowsCashierAdd(string $feeCode): bool
+{
+    return preg_match(
+        '/^(TICKET|TEST|THERAPY|MEDICATION|MINOR|EMERGENCY|OUTSIDE)(_|$)/',
+        $feeCode
+    ) !== 1;
+}
+
 function billingGetOrCreateBill(PDO $database, int $visitId): array
 {
     $statement = $database->prepare(
@@ -315,7 +323,7 @@ function billingCalculateBillTotal(PDO $database, int $billId): string
     $totalStatement = $database->prepare(
         'SELECT COALESCE(SUM(quantity * unit_amount), 0.00)
          FROM bill_items
-         WHERE bill_id = :bill_id'
+         WHERE bill_id = :bill_id AND is_voided = 0'
     );
     $totalStatement->execute(['bill_id' => $billId]);
     return (string) $totalStatement->fetchColumn();
@@ -364,6 +372,7 @@ function billingGetBillBalance(PDO $database, int $billId): array
                        SELECT SUM(item.quantity * item.unit_amount)
                        FROM bill_items item
                        WHERE item.bill_id = bill.bill_id
+                         AND item.is_voided = 0
                    ), 0.00) AS billed_amount,
                    COALESCE((
                        SELECT SUM(payment.amount)

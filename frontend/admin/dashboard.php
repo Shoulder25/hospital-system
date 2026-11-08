@@ -44,7 +44,9 @@ $escape = static function ($value): string {
     <title>Administration dashboard | Hospital Patient Processing</title>
     <link rel="stylesheet" href="../assets/css/auth.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
+    <link rel="stylesheet" href="../assets/css/staff-layout.css">
     <script src="../assets/js/admin.js" defer></script>
+    <script src="../assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page admin-page" data-page="admin-dashboard">
     <div class="dashboard-layout">
@@ -57,6 +59,7 @@ $escape = static function ($value): string {
             <nav class="side-nav" aria-label="Administration navigation">
                 <a class="side-link active" href="dashboard.php"><span aria-hidden="true">⌂</span> Overview</a>
                 <a class="side-link" href="users.php"><span aria-hidden="true">♙</span> Staff accounts</a>
+                <a class="side-link" href="fees.php"><span aria-hidden="true">$</span> Fee management</a>
                 <a class="side-link" href="../visit-status.php"><span aria-hidden="true">◷</span> Visit status</a>
                 <a class="side-link" href="../reception/index.php"><span aria-hidden="true">⌕</span> Reception desk</a>
                 <a class="side-link" href="../nursing/index.php"><span aria-hidden="true">＋</span> Nursing</a>

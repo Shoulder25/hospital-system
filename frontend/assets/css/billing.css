@@ -2,6 +2,11 @@
 .billing-welcome { align-items: flex-end; margin-bottom: 0; }
 .billing-welcome h1 { margin: 0 0 8px; font-size: clamp(26px, 3vw, 34px); letter-spacing: -1px; }
 .billing-demo-badge { flex: 0 0 auto; border: 1px solid #f1dfb8; border-radius: 999px; padding: 8px 12px; background: #fff8e9; color: #825d17; font-size: 10px; font-weight: 800; letter-spacing: .07em; }
+.billing-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.billing-stats article { display: grid; min-width: 0; gap: 10px; padding: 16px; border: 1px solid #e5edef; border-radius: 10px; background: #fff; }
+.billing-stats article span { color: #718388; font-size: 11px; }
+.billing-stats article strong { color: #263f46; font-size: 22px; overflow-wrap: anywhere; }
+.billing-stats .billing-received-stat { grid-column: span 2; }
 .billing-panel { min-width: 0; }
 .billing-panel-heading { align-items: flex-end; }
 .billing-search { display: grid; min-width: min(100%, 300px); gap: 6px; }
@@ -15,6 +20,45 @@
 .billing-table td { vertical-align: middle; }
 .billing-table td strong, .billing-table td small { display: block; }
 .billing-table td small { margin-top: 4px; color: #819095; font-size: 10px; }
+.billing-items { min-width: 800px; }
+.billing-item-voided { background: #f7f8f8; color: #8a9698 !important; }
+.billing-item-voided td { color: #8a9698 !important; text-decoration: line-through; }
+.billing-item-voided td:last-child { text-decoration: none; }
+.billing-service-adder { display: grid; gap: 12px; padding: 16px; border: 1px solid #e4eeed; border-radius: 9px; background: #f8fbfb; }
+.billing-service-adder h3 { margin: 0 0 5px; color: #30494f; font-size: 13px; }
+.billing-service-adder p { margin: 0; color: #718388; font-size: 11px; line-height: 1.5; }
+.billing-service-adder form { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(90px, .7fr) minmax(180px, 1.3fr) auto; align-items: end; gap: 9px; }
+.billing-service-adder form > div { display: grid; gap: 6px; }
+.billing-service-adder label { color: #536a71; font-size: 10px; font-weight: 700; }
+.billing-service-adder select, .billing-service-adder input { width: 100%; min-height: 38px; border: 1px solid #dbe5e6; border-radius: 6px; padding: 0 9px; background: #fff; color: #30494f; font: inherit; font-size: 11px; }
+.billing-service-price { padding-bottom: 11px; color: #30494f; font-size: 11px; font-weight: 700; }
+.billing-service-adder .button { min-height: 38px; }
+.billing-service-adder .button:disabled { cursor: not-allowed; opacity: .6; }
+.billing-history-table { min-width: 650px; }
+.billing-history { display: grid; gap: 10px; }
+.billing-history h3 { margin: 0; color: #30494f; font-size: 13px; }
+.billing-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.billing-totals div { padding: 14px; border: 1px solid #e8eeee; border-radius: 8px; background: #fbfdfd; }
+.billing-totals dt { color: #7c8d92; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.billing-totals dd { margin: 6px 0 0; color: #30494f; font-size: 16px; font-weight: 700; }
+.billing-totals .billing-balance-total { border-color: #b8dad4; background: #edf8f5; }
+.billing-totals .billing-balance-total dd { color: #126d65; font-size: 20px; }
+.billing-payment-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.billing-payment-controls input { width: 180px; min-height: 37px; border: 1px solid #dbe5e6; border-radius: 6px; padding: 0 9px; color: #30494f; font: inherit; }
+.billing-payment-controls select { flex: 0 1 230px; }
+.billing-payment-controls .button { min-height: 37px; }
+.billing-no-bill { margin: 0; padding: 12px 14px; border: 1px solid #f1dfb8; border-radius: 8px; background: #fff8e9; color: #725b2a; font-size: 11px; line-height: 1.5; }
+.billing-date-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.billing-date-range label { display: grid; gap: 5px; color: #536a71; font-size: 10px; font-weight: 700; }
+.billing-date-range input { min-height: 36px; border: 1px solid #dbe5e6; border-radius: 6px; padding: 0 8px; color: #30494f; font: inherit; }
+.billing-range-section { display: grid; gap: 18px; }
+.billing-fees { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 16px 20px; }
+.billing-fee { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid #edf1f2; border-radius: 7px; color: #64787d; font-size: 10px; }
+.billing-fee strong { color: #30494f; white-space: nowrap; }
+.billing-missing-fees:not([hidden]) { margin: 14px 20px 0; padding: 11px 13px; border: 1px solid #f0d7d8; border-radius: 7px; background: #fff5f5; color: #a63d43; font-size: 11px; line-height: 1.5; }
+.billing-medical-aid-fields { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; }
+.billing-medical-aid-fields label { display: grid; gap: 6px; color: #536a71; font-size: 10px; font-weight: 700; }
+.billing-medical-aid-fields input, .billing-medical-aid-fields select { width: 100%; min-height: 37px; border: 1px solid #dbe5e6; border-radius: 6px; padding: 0 9px; color: #30494f; font: inherit; }
 .billing-payment-form { display: flex; min-width: 220px; gap: 6px; }
 .billing-payment-form select { width: 100%; min-width: 115px; min-height: 34px; border: 1px solid #dbe5e6; border-radius: 6px; padding: 0 7px; background: #fff; color: #30494f; font: inherit; font-size: 10px; }
 .billing-payment-form .button { white-space: nowrap; }
@@ -52,11 +96,22 @@
     .receipt-card { padding: 19px; }
     .receipt-details { grid-template-columns: 1fr; gap: 12px; }
     .billing-visit-details { grid-template-columns: 1fr; }
+    .billing-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .billing-stats .billing-received-stat { grid-column: auto; }
+    .billing-totals { grid-template-columns: 1fr; }
+    .billing-fees { grid-template-columns: 1fr; padding: 15px; }
+    .billing-payment-controls { align-items: stretch; flex-direction: column; }
+    .billing-payment-controls input, .billing-payment-controls select { width: 100%; max-width: none; }
+    .billing-date-range { align-items: stretch; flex-direction: column; }
+    .billing-medical-aid-fields { grid-template-columns: 1fr; }
+    .billing-service-adder form { grid-template-columns: 1fr; }
+    .billing-service-price { padding: 3px 0; }
+    .billing-service-adder .button { width: 100%; }
 }
 
 @media print {
     body, .dashboard-page { min-width: 0; background: #fff; }
-    .sidebar, .topbar, .admin-notice, .billing-note { display: none !important; }
+    .sidebar, .topbar, .admin-notice, .billing-note, .staff-sidebar-overlay, .staff-sidebar-toggle { display: none !important; }
     .admin-page .dashboard-main { width: 100%; margin: 0; }
     .billing-content { display: block; padding: 0; }
     .receipt-card { max-width: none; margin: 0; padding: 0; border: 0; box-shadow: none; }

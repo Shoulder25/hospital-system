@@ -3,8 +3,11 @@
 (() => {
     const projectBase = new URL('../../../', document.currentScript.src).pathname;
     const apiEntry = new URL(`${projectBase}backend/index.php`, window.location.origin);
+    const nursingPage = document.body.dataset.nursingPage || 'overview';
     const messageElement = document.querySelector('[data-nursing-message]');
     let csrfToken = '';
+    let currentUserId = null;
+    let currentUserRole = '';
     let medicineCatalogue = [];
     let activeVisitId = null;
     let searchTimer = null;
@@ -97,6 +100,8 @@
             window.location.replace(`${projectBase}frontend/dashboard.php`);
             return false;
         }
+        currentUserId = Number(payload.data.user.user_id);
+        currentUserRole = role;
         csrfToken = payload.data.csrf_token;
         return true;
     }
@@ -124,6 +129,10 @@
             hour: 'numeric',
             minute: '2-digit',
         }).format(date);
+    }
+
+    function pretty(value) {
+        return value ? String(value).replaceAll('_', ' ') : '—';
     }
 
     function appendCell(row, value, className = '') {
@@ -156,32 +165,43 @@
             if (element) element.textContent = String(value);
         });
         medicineCatalogue = data.minor_treatment_medicines;
-        await loadQueue();
+        if (document.querySelector('[data-queue-rows]')) await loadQueue();
     }
 
-    async function loadQueue(search = '') {
+    async function loadQueue(
+        search = document.querySelector('[data-queue-search]').value.trim(),
+        filter = document.querySelector('[data-queue-filter]').value
+    ) {
         const body = document.querySelector('[data-queue-rows]');
-        emptyRow(body, 7, 'Loading nursing queue…');
+        emptyRow(body, 10, 'Loading nursing queue…');
         try {
             const data = await parseRequest(
                 '/api/nursing/queue',
-                { query: search ? { search } : {} },
+                { query: { search, filter } },
                 'Could not load the nursing queue.'
             );
+            const drafts = data.visits.filter(
+                (visit) => visit.assessment_id !== null && visit.decision === null
+            );
+            const incomingVisits = data.visits.filter(
+                (visit) => visit.assessment_id === null
+                    || (visit.decision === 'minor_illness' && !visit.has_treatment)
+            );
             body.replaceChildren();
-            if (data.visits.length === 0) {
-                emptyRow(body, 7, 'No eligible patients are currently waiting for nursing.');
-                return;
+            if (incomingVisits.length === 0) {
+                emptyRow(body, 10, 'No eligible patients are currently waiting for nursing.');
             }
-            data.visits.forEach((visit) => {
+            incomingVisits.forEach((visit) => {
                 const row = document.createElement('tr');
+                appendCell(row, `#${visit.visit_id}`);
                 appendCell(row, visit.patient_number);
                 appendCell(row, visit.patient_name || 'Unknown patient');
-                appendCell(row, formatDateTime(visit.arrived_at));
-                const emergencyCell = appendCell(row, visit.is_emergency ? 'Emergency' : 'No');
-                emergencyCell.className = visit.is_emergency ? 'nursing-emergency' : '';
+                appendCell(
+                    row,
+                    visit.age === null ? visit.gender : `${visit.age} · ${visit.gender}`
+                );
                 appendCell(row, visit.visit_source.replaceAll('_', ' '));
-
+                appendCell(row, formatDateTime(visit.arrived_at));
                 const statusCell = appendCell(row, '');
                 const status = document.createElement('span');
                 status.className = 'status-badge';
@@ -190,23 +210,95 @@
                     : visit.status.replaceAll('_', ' ');
                 statusCell.appendChild(status);
 
+                const paymentCell = appendCell(row, '');
+                const paymentBadge = document.createElement('span');
+                paymentBadge.className = `status-badge${visit.ticket_payment_confirmed ? '' : ' inactive'}`;
+                paymentBadge.textContent = visit.ticket_payment_confirmed
+                    ? 'Confirmed'
+                    : 'Not found';
+                paymentCell.appendChild(paymentBadge);
+
+                appendCell(row, visit.assigned_nurse_name || 'Unassigned');
                 const actionCell = appendCell(row, '', 'nursing-action-cell');
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'status-toggle';
-                button.textContent = visit.assessment_id
-                    ? (visit.decision === 'minor_illness' ? 'Record treatment' : 'Continue decision')
-                    : 'Open assessment';
-                button.addEventListener('click', () => openVisit(visit.visit_id));
-                actionCell.appendChild(button);
+                if (currentUserRole === 'nurse') {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'status-toggle';
+                    const assignedToMe = Number(visit.assigned_nurse_user_id) === currentUserId;
+                    button.textContent = assignedToMe
+                        ? (visit.assessment_id
+                            ? (visit.decision === 'minor_illness' ? 'Record treatment' : 'Continue assessment')
+                            : 'Start assessment')
+                        : (visit.assigned_nurse_user_id ? 'View record' : 'Start assessment');
+                    button.addEventListener('click', () => {
+                        if (!visit.assigned_nurse_user_id || assignedToMe) {
+                            startAssessment(visit, button);
+                        } else {
+                            window.location.href = `assessment.php?visit_id=${encodeURIComponent(visit.visit_id)}`;
+                        }
+                    });
+                    actionCell.appendChild(button);
+                } else {
+                    const viewButton = document.createElement('button');
+                    viewButton.type = 'button';
+                    viewButton.className = 'status-toggle';
+                    viewButton.textContent = 'View record';
+                    viewButton.addEventListener('click', () => {
+                        window.location.href = `assessment.php?visit_id=${encodeURIComponent(visit.visit_id)}`;
+                    });
+                    actionCell.appendChild(viewButton);
+                    if (!visit.assessment_id) {
+                        const reassignButton = document.createElement('button');
+                        reassignButton.type = 'button';
+                        reassignButton.className = 'status-toggle activate';
+                        reassignButton.textContent = visit.assigned_nurse_user_id
+                            ? 'Reassign'
+                            : 'Assign nurse';
+                        reassignButton.addEventListener('click', () => reassignVisit(visit));
+                        actionCell.append(document.createTextNode(' '), reassignButton);
+                    }
+                }
                 body.appendChild(row);
             });
+
+            const draftBody = document.querySelector('[data-draft-rows]');
+            if (draftBody) {
+                draftBody.replaceChildren();
+                if (drafts.length === 0) {
+                    emptyRow(draftBody, 7, 'No saved drafts are waiting to be resumed.');
+                } else {
+                    drafts.forEach((visit) => {
+                        const row = document.createElement('tr');
+                        appendCell(row, `#${visit.visit_id}`);
+                        appendCell(row, `${visit.patient_name || 'Unknown patient'} · ${visit.patient_number}`);
+                        appendCell(row, visit.visit_source.replaceAll('_', ' '));
+                        appendCell(row, formatDateTime(visit.arrived_at));
+                        appendCell(row, formatDateTime(visit.nursing_started_at));
+                        appendCell(row, visit.assigned_nurse_name || 'Unassigned');
+                        const action = appendCell(row, '', 'nursing-action-cell');
+                        const button = document.createElement('button');
+                        button.type = 'button';
+                        button.className = 'status-toggle';
+                        const assignedToMe = Number(visit.assigned_nurse_user_id) === currentUserId;
+                        button.textContent = currentUserRole === 'nurse' && assignedToMe
+                            ? 'Resume draft'
+                            : 'View draft';
+                        button.addEventListener('click', () => {
+                            window.location.href = `assessment.php?visit_id=${encodeURIComponent(visit.visit_id)}`;
+                        });
+                        action.appendChild(button);
+                        draftBody.appendChild(row);
+                    });
+                }
+            }
         } catch (error) {
-            emptyRow(body, 7, error.message);
+            emptyRow(body, 10, error.message);
+            const draftBody = document.querySelector('[data-draft-rows]');
+            if (draftBody) emptyRow(draftBody, 7, error.message);
         }
     }
 
-    function setPatientSummary(patient, visit) {
+    function setPatientSummary(patient, visit, assessment) {
         const summary = document.querySelector('[data-patient-summary]');
         summary.replaceChildren();
         [
@@ -214,8 +306,20 @@
             ['Full name', patient.full_name || 'Unknown emergency patient'],
             ['Date of birth', patient.date_of_birth || '—'],
             ['Gender', patient.gender],
-            ['Visit date', formatDateTime(visit.arrived_at)],
+            ['Phone', patient.phone],
+            ['Address', patient.address],
+            ['Visit ID', `#${visit.visit_id}`],
+            ['Arrival time', formatDateTime(visit.arrived_at)],
             ['Visit source', visit.visit_source.replaceAll('_', ' ')],
+            ['Visit reason', visit.reason_for_visit],
+            ['Reception notes', visit.reception_notes],
+            ['Source notes', visit.source_notes],
+            ['Appointment reason', visit.appointment_reason],
+            ['Assigned nurse', visit.assigned_nurse_name || 'Unassigned'],
+            ['Assessment nurse', assessment ? visit.assigned_nurse_name : 'Not recorded'],
+            ['Assessment date', assessment ? formatDateTime(assessment.assessed_at) : 'Not recorded'],
+            ['Assessment started', formatDateTime(visit.nursing_started_at)],
+            ['Ticket payment', visit.ticket_payment_confirmed ? 'Confirmed' : 'Not found'],
             ['Current status', visit.status.replaceAll('_', ' ')],
         ].forEach(([label, value]) => {
             const item = document.createElement('div');
@@ -245,11 +349,80 @@
             appendCell(row, visit.status.replaceAll('_', ' '));
             const assessment = visit.assessment;
             const text = assessment
-                ? [assessment.complaint, assessment.decision && assessment.decision.replaceAll('_', ' ')]
-                    .filter(Boolean)
-                    .join(' · ')
+                ? [
+                    `Complaint: ${assessment.complaint || '—'}`,
+                    assessment.symptoms && `Symptoms: ${assessment.symptoms}`,
+                    assessment.symptom_duration && `Duration: ${assessment.symptom_duration}`,
+                    assessment.decision && `Outcome: ${assessment.decision.replaceAll('_', ' ')}`,
+                    assessment.blood_pressure && `BP: ${assessment.blood_pressure}`,
+                    assessment.pulse !== null && assessment.pulse !== undefined && `Pulse: ${assessment.pulse}`,
+                    assessment.temperature !== null && assessment.temperature !== undefined
+                        && `Temperature: ${assessment.temperature}`,
+                    assessment.respiratory_rate !== null && assessment.respiratory_rate !== undefined
+                        && `Respiratory rate: ${assessment.respiratory_rate}`,
+                    assessment.oxygen_saturation !== null && assessment.oxygen_saturation !== undefined
+                        && `Oxygen saturation: ${assessment.oxygen_saturation}`,
+                    assessment.weight !== null && assessment.weight !== undefined
+                        && `Weight: ${assessment.weight}`,
+                    assessment.height !== null && assessment.height !== undefined
+                        && `Height: ${assessment.height}`,
+                    assessment.notes && `Notes: ${assessment.notes}`,
+                    assessment.assessed_by && `Nurse: ${assessment.assessed_by}`,
+                    assessment.assessed_at && `Recorded: ${formatDateTime(assessment.assessed_at)}`,
+                ].filter(Boolean).join('\n')
                 : 'No nursing assessment';
             appendCell(row, text || '—');
+            body.appendChild(row);
+        });
+    }
+
+    function renderDoctorNotes(notes) {
+        const body = document.querySelector('[data-doctor-history-rows]');
+        body.replaceChildren();
+        if (!notes.length) {
+            emptyRow(body, 4, 'No previous doctor notes are recorded.');
+            return;
+        }
+        notes.forEach((note) => {
+            const row = document.createElement('tr');
+            appendCell(row, `#${note.visit_id} · ${formatDateTime(note.consulted_at || note.arrived_at)}`);
+            appendCell(row, note.consultation_type.replaceAll('_', ' '));
+            appendCell(
+                row,
+                [
+                    note.presenting_complaint && `Complaint: ${note.presenting_complaint}`,
+                    note.clinical_observations && `Observations: ${note.clinical_observations}`,
+                    note.examination_findings && `Examination: ${note.examination_findings}`,
+                ].filter(Boolean).join('\n') || '—'
+            );
+            appendCell(
+                row,
+                [
+                    note.diagnosis_text && `Diagnosis: ${note.diagnosis_text}`,
+                    note.treatment_plan && `Plan: ${note.treatment_plan}`,
+                    note.notes && `Notes: ${note.notes}`,
+                ].filter(Boolean).join('\n') || '—'
+            );
+            body.appendChild(row);
+        });
+    }
+
+    function renderTestResults(results) {
+        const body = document.querySelector('[data-test-history-rows]');
+        body.replaceChildren();
+        if (!results.length) {
+            emptyRow(body, 4, 'No previous test results are recorded.');
+            return;
+        }
+        results.forEach((result) => {
+            const row = document.createElement('tr');
+            appendCell(row, `#${result.visit_id} · ${formatDateTime(result.recorded_at)}`);
+            appendCell(row, `${result.test_type.replaceAll('_', ' ')} · ${result.department}`);
+            appendCell(row, `${result.result_status} · order ${result.order_status}`);
+            appendCell(
+                row,
+                [result.result_text, result.result_notes].filter(Boolean).join('\n') || '—'
+            );
             body.appendChild(row);
         });
     }
@@ -342,6 +515,8 @@
         const assessment = data.assessment;
         const decisionSection = document.querySelector('[data-decision-section]');
         const treatmentSection = document.querySelector('[data-treatment-section]');
+        const assignedToMe = currentUserRole === 'nurse'
+            && Number(data.visit.assigned_nurse_user_id) === currentUserId;
         decisionSection.hidden = true;
         treatmentSection.hidden = true;
         document.querySelector('[data-decision-form]').reset();
@@ -350,16 +525,19 @@
         renderTreatmentItems();
 
         if (!assessment) {
-            toggleAssessmentReadOnly(false);
+            toggleAssessmentReadOnly(!assignedToMe);
+            document.querySelector('[data-save-hint]').textContent = assignedToMe
+                ? ''
+                : 'This record is read-only. Start the assessment as the assigned nurse before recording clinical information.';
             return;
         }
         fillAssessment(assessment);
         toggleAssessmentReadOnly(true);
         if (assessment.decision === 'minor_illness') {
-            treatmentSection.hidden = false;
+            treatmentSection.hidden = !assignedToMe;
             return;
         }
-        decisionSection.hidden = false;
+        decisionSection.hidden = !assignedToMe;
     }
 
     async function openVisit(visitId) {
@@ -371,8 +549,24 @@
                 'Could not open this nursing visit.'
             );
             activeVisitId = Number(visitId);
-            setPatientSummary(data.patient, data.visit);
+            if (currentUserRole === 'nurse'
+                && data.visit.status === 'awaiting_nurse'
+                && !data.visit.assigned_nurse_user_id) {
+                await parseRequest(
+                    `/api/nursing/visits/${encodeURIComponent(visitId)}/start`,
+                    { method: 'POST', body: JSON.stringify({}) },
+                    'Could not take responsibility for this visit.'
+                );
+                return openVisit(visitId);
+            }
+            setPatientSummary(data.patient, data.visit, data.assessment);
             renderHistory(data.history);
+            renderDoctorNotes(data.doctor_notes);
+            renderTestResults(data.test_results);
+            document.querySelector('[data-allergies]').textContent =
+                data.allergies_supported
+                    ? (data.allergies.length ? data.allergies.join(', ') : 'No allergies recorded.')
+                    : 'Allergy records are not supported by the current database schema.';
             displayAssessmentState(data);
             const panel = document.querySelector('[data-assessment-panel]');
             panel.hidden = false;
@@ -380,6 +574,67 @@
         } catch (error) {
             showMessage(error.message);
             await refreshDashboard();
+        }
+    }
+
+    async function startAssessment(visit, button) {
+        setBusy(button, true, 'Starting…');
+        try {
+            await parseRequest(
+                `/api/nursing/visits/${visit.visit_id}/start`,
+                { method: 'POST', body: JSON.stringify({}) },
+                'Could not start this assessment.'
+            );
+            window.location.href = `assessment.php?visit_id=${encodeURIComponent(visit.visit_id)}`;
+        } catch (error) {
+            if (error.status === 409) {
+                showMessage('Another nurse has already taken this visit. The queue has been refreshed.');
+                await loadQueue();
+            } else {
+                showMessage(error.message);
+            }
+        } finally {
+            setBusy(button, false);
+        }
+    }
+
+    async function reassignVisit(visit) {
+        try {
+            const data = await parseRequest(
+                '/api/nursing/nurses',
+                {},
+                'Could not load active nurses for reassignment.'
+            );
+            if (!data.nurses.length) {
+                showMessage('No active nurse accounts are available for assignment.');
+                return;
+            }
+            const choices = data.nurses
+                .map((nurse) => `${nurse.user_id}: ${nurse.display_name}`)
+                .join('\n');
+            const answer = window.prompt(
+                `Enter the active nurse ID for visit #${visit.visit_id}:\n${choices}`,
+                visit.assigned_nurse_user_id ? String(visit.assigned_nurse_user_id) : ''
+            );
+            if (answer === null) return;
+            const nurseId = Number(answer.trim());
+            if (!data.nurses.some((nurse) => nurse.user_id === nurseId)) {
+                showMessage('Choose one of the active nurse IDs shown in the list.');
+                return;
+            }
+            await parseRequest(
+                `/api/nursing/visits/${visit.visit_id}/reassign`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({ nurse_user_id: nurseId }),
+                },
+                'Could not reassign this visit.'
+            );
+            await refreshDashboard(false);
+            showMessage(`Visit #${visit.visit_id} was reassigned to nurse ${nurseId}.`, 'success');
+        } catch (error) {
+            showMessage(error.message);
+            await loadQueue();
         }
     }
 
@@ -531,6 +786,108 @@
         }
     }
 
+    function renderCompletedAssessments(assessments) {
+        const body = document.querySelector('[data-completed-rows]');
+        if (!body) return;
+        body.replaceChildren();
+        if (!assessments.length) {
+            emptyRow(body, 7, 'No completed nursing assessments match this search.');
+            return;
+        }
+        assessments.forEach((assessment) => {
+            const row = document.createElement('tr');
+            appendCell(row, `#${assessment.visit_id} · ${assessment.patient_name}`);
+            appendCell(row, `${formatDateTime(assessment.arrived_at)} · ${assessment.visit_source.replaceAll('_', ' ')}`);
+            appendCell(row, formatDateTime(assessment.assessed_at));
+            appendCell(row, assessment.nurse_name);
+            appendCell(row, [
+                assessment.complaint && `Complaint: ${assessment.complaint}`,
+                assessment.symptoms && `Symptoms: ${assessment.symptoms}`,
+                assessment.symptom_duration && `Duration: ${assessment.symptom_duration}`,
+                assessment.blood_pressure && `BP: ${assessment.blood_pressure}`,
+                assessment.pulse !== null && `Pulse: ${assessment.pulse}`,
+                assessment.temperature !== null && `Temperature: ${assessment.temperature}`,
+                assessment.respiratory_rate !== null && `Respiratory rate: ${assessment.respiratory_rate}`,
+                assessment.oxygen_saturation !== null && `Oxygen saturation: ${assessment.oxygen_saturation}`,
+                assessment.weight !== null && `Weight: ${assessment.weight}`,
+                assessment.height !== null && `Height: ${assessment.height}`,
+                assessment.notes && `Observations: ${assessment.notes}`,
+            ].filter(Boolean).join('\n') || '—');
+            appendCell(row, [
+                pretty(assessment.decision),
+                assessment.minor_treatment_notes,
+                assessment.treatment_summary && `Treatment: ${assessment.treatment_summary}`,
+            ].filter(Boolean).join('\n'));
+            appendCell(row, pretty(assessment.visit_status));
+            body.appendChild(row);
+        });
+    }
+
+    async function loadCompletedAssessments(search = '') {
+        const body = document.querySelector('[data-completed-rows]');
+        if (!body) return;
+        emptyRow(body, 7, 'Loading completed assessments…');
+        try {
+            const data = await parseRequest(
+                '/api/nursing/completed',
+                { query: { search } },
+                'Could not load completed nursing assessments.'
+            );
+            renderCompletedAssessments(data.assessments);
+        } catch (error) {
+            emptyRow(body, 7, error.message);
+        }
+    }
+
+    function renderDoctorReferrals(referrals) {
+        const body = document.querySelector('[data-referral-rows]');
+        if (!body) return;
+        body.replaceChildren();
+        if (!referrals.length) {
+            emptyRow(body, 6, 'No nursing referrals to the Doctor queue match this search.');
+            return;
+        }
+        referrals.forEach((referral) => {
+            const row = document.createElement('tr');
+            appendCell(row, `#${referral.visit_id} · ${referral.patient_name} · ${referral.patient_number}`);
+            appendCell(row, referral.visit_source.replaceAll('_', ' '));
+            appendCell(row, formatDateTime(referral.referral_at));
+            appendCell(row, referral.nurse_name);
+            appendCell(row, [
+                referral.complaint && `Reason: ${referral.complaint}`,
+                referral.symptoms && `Symptoms: ${referral.symptoms}`,
+                referral.assessment_findings && `Findings: ${referral.assessment_findings}`,
+            ].filter(Boolean).join('\n') || '—');
+            appendCell(row, pretty(referral.visit_status));
+            body.appendChild(row);
+        });
+    }
+
+    async function loadDoctorReferrals(search = '') {
+        const body = document.querySelector('[data-referral-rows]');
+        if (!body) return;
+        emptyRow(body, 6, 'Loading doctor referrals…');
+        try {
+            const data = await parseRequest(
+                '/api/nursing/referrals',
+                { query: { search } },
+                'Could not load nursing doctor referrals.'
+            );
+            renderDoctorReferrals(data.referrals);
+        } catch (error) {
+            emptyRow(body, 6, error.message);
+        }
+    }
+
+    function bindListSearch(selector, loader) {
+        const input = document.querySelector(selector);
+        if (!input) return;
+        input.addEventListener('input', () => {
+            window.clearTimeout(searchTimer);
+            searchTimer = window.setTimeout(() => loader(input.value.trim()), 250);
+        });
+    }
+
     async function refreshDashboard(showErrors = true) {
         try {
             await loadDashboard();
@@ -541,12 +898,17 @@
 
     function bindQueueSearch() {
         const input = document.querySelector('[data-queue-search]');
+        if (!input) return;
         input.addEventListener('input', () => {
             window.clearTimeout(searchTimer);
             searchTimer = window.setTimeout(
                 () => loadQueue(input.value.trim()),
                 250
             );
+        });
+        document.querySelector('[data-queue-filter]').addEventListener('change', () => loadQueue());
+        document.querySelector('[data-refresh-queue]').addEventListener('click', () => {
+            refreshDashboard(false);
         });
     }
 
@@ -560,7 +922,9 @@
     }
 
     function bindLogout() {
-        document.querySelector('[data-sign-out]').addEventListener('click', async (event) => {
+        const button = document.querySelector('[data-sign-out]');
+        if (!button) return;
+        button.addEventListener('click', async (event) => {
             const button = event.currentTarget;
             setBusy(button, true, 'Signing out…');
             try {
@@ -575,27 +939,67 @@
     }
 
     async function init() {
-        document.querySelector('[data-current-date]').textContent =
-            new Intl.DateTimeFormat(undefined, {
+        const currentDate = document.querySelector('[data-current-date]');
+        if (currentDate) {
+            currentDate.textContent = new Intl.DateTimeFormat(undefined, {
                 weekday: 'long',
                 month: 'long',
                 day: 'numeric',
             }).format(new Date());
-        document.querySelector('[data-close-assessment]').addEventListener('click', () => {
-            document.querySelector('[data-assessment-panel]').hidden = true;
-            activeVisitId = null;
-        });
-        document.querySelector('[data-assessment-form]').addEventListener('submit', saveAssessment);
-        document.querySelector('[data-decision-form]').addEventListener('submit', submitDecision);
-        document.querySelector('[data-treatment-form]').addEventListener('submit', saveMinorTreatment);
-        document.querySelector('[data-add-treatment-item]').addEventListener('click', addTreatmentItem);
-        bindQueueSearch();
-        bindDecisionVisibility();
+        }
         bindLogout();
 
         try {
             if (!await checkSession()) return;
+            if (nursingPage === 'overview') {
+                await loadDashboard();
+                window.setInterval(() => refreshDashboard(false), 15000);
+                return;
+            }
+            if (nursingPage === 'queue') {
+                bindQueueSearch();
+                await loadDashboard();
+                window.setInterval(() => refreshDashboard(false), 15000);
+                return;
+            }
+            if (nursingPage === 'completed') {
+                bindListSearch('[data-completed-search]', loadCompletedAssessments);
+                document.querySelector('[data-refresh-completed]')?.addEventListener(
+                    'click',
+                    () => loadCompletedAssessments(
+                        document.querySelector('[data-completed-search]').value.trim()
+                    )
+                );
+                await loadCompletedAssessments();
+                return;
+            }
+            if (nursingPage === 'referrals') {
+                bindListSearch('[data-referral-search]', loadDoctorReferrals);
+                document.querySelector('[data-refresh-referrals]')?.addEventListener(
+                    'click',
+                    () => loadDoctorReferrals(
+                        document.querySelector('[data-referral-search]').value.trim()
+                    )
+                );
+                await loadDoctorReferrals();
+                return;
+            }
+
+            document.querySelector('[data-close-assessment]')?.addEventListener('click', () => {
+                window.location.href = 'queue.php';
+            });
+            document.querySelector('[data-assessment-form]')?.addEventListener('submit', saveAssessment);
+            document.querySelector('[data-decision-form]')?.addEventListener('submit', submitDecision);
+            document.querySelector('[data-treatment-form]')?.addEventListener('submit', saveMinorTreatment);
+            document.querySelector('[data-add-treatment-item]')?.addEventListener('click', addTreatmentItem);
+            bindDecisionVisibility();
             await loadDashboard();
+            const visitId = new URLSearchParams(window.location.search).get('visit_id');
+            if (!visitId || !/^\d+$/.test(visitId)) {
+                showMessage('Open an eligible visit from the nursing queue.');
+                return;
+            }
+            await openVisit(visitId);
         } catch (error) {
             showMessage(error.message);
         }

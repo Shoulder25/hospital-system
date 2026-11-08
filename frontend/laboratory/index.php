@@ -18,8 +18,9 @@ $initial = $initialMatch[0] ?? 'L';
 <head>
     <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f5f8fa">
     <title>Laboratory | Hospital Patient Processing</title>
-    <link rel="stylesheet" href="../assets/css/auth.css"><link rel="stylesheet" href="../assets/css/admin.css"><link rel="stylesheet" href="../assets/css/testing.css">
+    <link rel="stylesheet" href="../assets/css/auth.css"><link rel="stylesheet" href="../assets/css/admin.css"><link rel="stylesheet" href="../assets/css/testing.css"><link rel="stylesheet" href="../assets/css/staff-layout.css">
     <script src="../assets/js/testing.js" defer></script>
+    <script src="../assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page admin-page testing-page" data-base-path="<?= $escape($basePath) ?>" data-testing-scope="laboratory">
     <div class="dashboard-layout">

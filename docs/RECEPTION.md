@@ -51,11 +51,19 @@ Routing follows the arrival flow:
 - Medication collection only: `awaiting_pharmacy` (skips ticket payment and
   nursing assessment).
 - All other arrivals, including school appointments and referrals:
-  `awaiting_ticket_payment`.
+  `awaiting_ticket_payment`. Reception immediately opens the ticket payment
+  panel using the active `TICKET_DEMO` fee; after payment succeeds, the visit
+  advances to `awaiting_nurse` and the receipt is available from the panel.
+  The visit is then available in the shared Nursing queue; Reception does not
+  assign an individual nurse. Assignment happens when a nurse starts the
+  assessment.
 
 The user must not submit both emergency and medication-only flags together.
-Ticket payment and nursing are downstream modules and are not implemented
-here.
+Emergency and medication-collection-only arrivals do not show the ticket
+payment panel. Ticket payment uses the shared billing endpoint and records the
+authenticated receptionist as the responsible staff member; see
+[`BILLING.md`](./BILLING.md). The cashier queue remains available for cashier
+and administrator users.
 
 ## XAMPP and Postman checks
 
@@ -74,10 +82,19 @@ here.
 7. Create visits with `POST /api/reception/visits` and the CSRF header.
    Expect `emergency_in_progress`, `awaiting_pharmacy`, and
    `awaiting_ticket_payment` for emergency, medication-only, and normal
-   arrivals respectively. School appointments and referrals also remain
-   `awaiting_ticket_payment`.
-8. Without a session, expect HTTP 401. With an active account whose role is
-   neither `receptionist` nor `system_administrator`, expect HTTP 403.
+   arrivals respectively. Emergency and medication-only visits show the
+   corresponding no-ticket-payment message. Normal visits immediately show
+   patient details, visit ID, the active ticket-fee description and amount,
+   and payment-method choices. School appointments and referrals also require
+   payment before Nursing.
+8. Pay from the Reception panel using cash, simulated card, or simulated
+   medical aid. Confirm a receipt link appears and the visit changes to
+   `awaiting_nurse`; open the receipt and confirm it returns to Reception.
+   Refresh or retry a paid visit and confirm no duplicate payment is recorded.
+9. Without a session, expect HTTP 401. With an active account whose role is
+   neither `receptionist` nor `system_administrator`, expect HTTP 403 for
+   Reception APIs. Only receptionist, cashier, and system administrator may
+   record the initial ticket payment.
 
 Example patient request:
 

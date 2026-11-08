@@ -23,7 +23,9 @@ $initial = $initialMatch[0] ?? 'E';
     <link rel="stylesheet" href="../assets/css/auth.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
     <link rel="stylesheet" href="../assets/css/emergency.css">
+    <link rel="stylesheet" href="../assets/css/staff-layout.css">
     <script src="../assets/js/emergency.js" defer></script>
+    <script src="../assets/js/staff-sidebar.js" defer></script>
 </head>
 <body class="dashboard-page admin-page emergency-page"
       data-base-path="<?= $escape($basePath) ?>"

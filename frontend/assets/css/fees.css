@@ -1,0 +1,25 @@
+.fees-content { display: grid; gap: 20px; }
+.fee-form { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.fee-form .staff-form-field small { display: block; margin-top: 6px; color: #7d8e92; font-size: 10px; line-height: 1.45; }
+.fee-form .staff-form-field input:disabled { background: #f3f6f6; color: #879396; }
+.fee-currency { display: grid; align-content: start; gap: 7px; color: #415a60; font-size: 11px; font-weight: 700; }
+.fee-currency strong { display: flex; min-height: 42px; align-items: center; padding: 0 11px; border: 1px solid #e1e9e9; border-radius: 7px; background: #f8fbfb; color: #536c72; }
+.fee-check { display: flex; align-items: center; gap: 9px; color: #415a60; font-size: 11px; font-weight: 600; }
+.fee-check input { width: 16px; height: 16px; accent-color: #177d75; }
+.fee-form-actions { display: flex; align-items: center; gap: 9px; }
+.fee-form-actions .button { min-height: 40px; padding: 0 16px; }
+.fee-list-panel .admin-panel-heading { align-items: flex-end; }
+.fee-table { min-width: 1050px; }
+.fee-table td { vertical-align: middle; }
+.fee-table .fee-service-name { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.fee-table .fee-code-cell { color: #30494f; font-family: Consolas, monospace; font-size: 10px; }
+.fee-table .fee-updated-cell { min-width: 150px; }
+.fee-edit-button { min-height: 30px; padding: 0 10px; }
+
+@media (max-width: 720px) {
+    .fee-form { grid-template-columns: 1fr; }
+    .fee-list-panel .admin-panel-heading { align-items: stretch; }
+    .fee-list-heading .search-field { width: 100%; }
+    .fee-form-actions { align-items: stretch; flex-direction: column; }
+    .fee-form-actions .button { width: 100%; }
+}

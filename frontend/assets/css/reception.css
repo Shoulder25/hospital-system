@@ -44,10 +44,47 @@
 .patient-details-panel .button { flex: 0 0 auto; min-height: 34px; padding: 0 12px; font-size: 11px; }
 .patient-detail-actions { display: flex; flex: 0 0 auto; gap: 8px; }
 .reception-page .admin-notice { position: sticky; z-index: 3; top: 8px; }
+.reception-page .side-nav { gap: 5px; }
+.reception-page .side-link { min-height: 41px; }
+.reception-page .side-link.active { border-left: 3px solid #26958d; background: #e9f5f3; color: #176f68; }
+.reception-ticket-payment { margin-bottom: 20px; border-color: #b9ded5; }
+.reception-ticket-details { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0 20px 18px; }
+.reception-ticket-details dt { color: #869397; font-size: 10px; }
+.reception-ticket-details dd { margin: 4px 0 0; overflow-wrap: anywhere; color: #344d53; font-size: 12px; font-weight: 700; }
+.reception-ticket-form { display: flex; align-items: end; gap: 12px; padding: 0 20px 14px; }
+.reception-ticket-form label { display: grid; flex: 0 1 270px; gap: 6px; color: #415a60; font-size: 11px; font-weight: 700; }
+.reception-ticket-form select { min-height: 41px; padding: 9px 11px; border: 1px solid #dbe5e6; border-radius: 7px; background: #fff; color: #263f46; font: inherit; font-size: 12px; }
+.reception-ticket-form .button { min-height: 41px; }
+.reception-ticket-status, .reception-ticket-payment > .billing-note, .reception-ticket-receipt, [data-ticket-payment-retry] { margin: 0 20px 14px; }
+.reception-ticket-status { color: #526a70; font-size: 12px; }
+.reception-ticket-receipt, [data-ticket-payment-retry] { display: inline-flex; }
+.staff-identity-card { display: flex; align-items: center; gap: 10px; padding: 12px 10px; border: 1px solid rgb(255 255 255 / 11%); border-radius: 9px; background: rgb(255 255 255 / 4%); }
+.staff-identity-card .user-avatar { flex: 0 0 auto; }
+.staff-identity-card strong, .staff-identity-card small { display: block; overflow-wrap: anywhere; }
+.staff-identity-card strong { color: #f0f7f7; font-size: 11px; }
+.staff-identity-card small { margin-top: 4px; color: #a7bfc1; font-size: 9px; text-transform: capitalize; }
+.reception-overview-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.reception-quick-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin: 0 0 22px; }
+.reception-quick-card { display: grid; min-height: 130px; align-content: start; gap: 8px; padding: 17px; border: 1px solid #e5edef; border-radius: 10px; background: #fff; box-shadow: 0 3px 14px rgb(31 66 73 / 2%); color: #30494f; text-decoration: none; transition: border-color .15s ease, transform .15s ease; }
+.reception-quick-card:hover { transform: translateY(-2px); border-color: #9dcac4; }
+.reception-quick-card > span { display: grid; width: 31px; height: 31px; place-items: center; border-radius: 8px; background: #e9f5f3; color: #167c74; font-size: 17px; }
+.reception-quick-card strong { font-size: 12px; }
+.reception-quick-card small { color: #839195; font-size: 10px; line-height: 1.4; }
+.reception-dashboard-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px; margin-bottom: 22px; }
+.reception-dashboard-grid .admin-panel { min-width: 0; }
+.reception-dashboard-grid .admin-table { min-width: 0; }
+.reception-list-panel { margin-top: 20px; }
+.reception-filter { display: grid; gap: 5px; color: #63777c; font-size: 10px; font-weight: 700; }
+.reception-filter select { min-width: 180px; min-height: 36px; padding: 0 10px; border: 1px solid #dbe5e6; border-radius: 7px; background: white; color: #30494f; font: inherit; }
+.reception-list-panel .admin-panel-heading > .button { min-height: 36px; padding: 0 12px; font-size: 11px; }
+.reception-attention-panel { grid-column: 1 / -1; }
+.reception-attention-panel .status-badge { background: #fff3e7; color: #926b35; }
+.reception-attention-panel .status-badge::before { background: #d99a45; }
 
 @media (max-width: 1100px) {
     .reception-workspace { grid-template-columns: 1fr; }
     .reception-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reception-quick-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -55,12 +92,23 @@
     .reception-date { padding: 7px 10px; }
     .reception-search-form { align-items: stretch; flex-direction: column; padding: 14px; }
     .reception-search-form > .button { width: 100%; }
+    .reception-dashboard-grid { grid-template-columns: 1fr; }
+    .reception-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reception-quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reception-list-panel .admin-panel-heading { align-items: stretch; flex-direction: column; }
+    .reception-ticket-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .reception-ticket-form { align-items: stretch; flex-direction: column; }
+    .reception-ticket-form label { flex-basis: auto; }
 }
 
 @media (max-width: 520px) {
     .reception-stat-grid { grid-template-columns: 1fr; }
+    .reception-overview-stats { grid-template-columns: 1fr; }
+    .reception-quick-actions { grid-template-columns: 1fr; }
     .reception-stat-grid .stat-card { min-height: 120px; }
     .reception-form, .visit-form { grid-template-columns: 1fr; gap: 13px; padding: 15px; }
+    .reception-ticket-details { padding-right: 15px; padding-left: 15px; }
+    .reception-ticket-form { padding-right: 15px; padding-left: 15px; }
     .reception-field-wide, .visit-type-fieldset { grid-column: 1; }
     .visit-type-fieldset { flex-direction: column; }
     .patient-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-right: 15px; padding-left: 15px; }
