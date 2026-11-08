@@ -71,11 +71,13 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
+    padding: 18px 20px;
 }
 
 .testing-quick-links a {
     display: grid;
     align-content: start;
+    min-width: 0;
     gap: 8px;
     min-height: 105px;
     border: 1px solid #e1eaed;
@@ -100,6 +102,7 @@
     color: #647a83;
     font-size: .86rem;
     line-height: 1.45;
+    overflow-wrap: anywhere;
 }
 
 .testing-desk-actions {

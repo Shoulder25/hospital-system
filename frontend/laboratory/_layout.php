@@ -98,7 +98,7 @@ $testTypes = [
     <title><?= $escape($pageTitle) ?> | CareBridge</title>
     <link rel="stylesheet" href="../assets/css/auth.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
-    <link rel="stylesheet" href="../assets/css/testing.css">
+    <link rel="stylesheet" href="../assets/css/testing.css?v=20261108-laboratory-layout">
     <link rel="stylesheet" href="../assets/css/staff-layout.css">
     <script src="../assets/js/testing.js" defer></script>
     <script src="../assets/js/staff-sidebar.js" defer></script>

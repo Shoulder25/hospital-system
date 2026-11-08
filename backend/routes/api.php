@@ -70,6 +70,13 @@ function dispatchApiRequest(string $method, string $path): void
     $testingOrderId = null;
     $testingAction = null;
     $laboratorySpecimenOrderId = null;
+    $radiologyOrderFilesId = null;
+    $radiologyFileId = null;
+    $radiologyFileAction = null;
+    $cardiacOrderFilesId = null;
+    $cardiacFileId = null;
+    $cardiacFileAction = null;
+    $cardiacExaminationOrderId = null;
     $billingVisitId = null;
     $billingVisitAction = null;
     $billingBillId = null;
@@ -157,6 +164,48 @@ function dispatchApiRequest(string $method, string $path): void
         $matches
     )) {
         $laboratorySpecimenOrderId = $matches[1];
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/radiology/orders/([0-9]+)/files$#',
+        $path,
+        $matches
+    )) {
+        $radiologyOrderFilesId = $matches[1];
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/radiology/files/([0-9]+)(?:/(delete))?$#',
+        $path,
+        $matches
+    )) {
+        $radiologyFileId = $matches[1];
+        $radiologyFileAction = $matches[2] ?? '';
+        $routes[$path] = $radiologyFileAction === '' ? ['GET'] : ['DELETE'];
+    }
+    if (preg_match(
+        '#^/api/cardiac/orders/([0-9]+)/files$#',
+        $path,
+        $matches
+    )) {
+        $cardiacOrderFilesId = $matches[1];
+        $routes[$path] = ['POST'];
+    }
+    if (preg_match(
+        '#^/api/cardiac/files/([0-9]+)(?:/(delete))?$#',
+        $path,
+        $matches
+    )) {
+        $cardiacFileId = $matches[1];
+        $cardiacFileAction = $matches[2] ?? '';
+        $routes[$path] = $cardiacFileAction === '' ? ['GET'] : ['DELETE'];
+    }
+    if (preg_match(
+        '#^/api/cardiac/orders/([0-9]+)/examinations$#',
+        $path,
+        $matches
+    )) {
+        $cardiacExaminationOrderId = $matches[1];
         $routes[$path] = ['POST'];
     }
     if (preg_match(
@@ -437,6 +486,24 @@ function dispatchApiRequest(string $method, string $path): void
             }
         } elseif ($testingDeskOrderId !== null) {
             handleTestingDeskRoute($testingDeskOrderId);
+        } elseif ($radiologyOrderFilesId !== null) {
+            handleRadiologyFilesUpload($radiologyOrderFilesId);
+        } elseif ($radiologyFileId !== null) {
+            if ($radiologyFileAction === 'delete') {
+                handleRadiologyFileDelete($radiologyFileId);
+            } else {
+                handleRadiologyFileGet($radiologyFileId);
+            }
+        } elseif ($cardiacOrderFilesId !== null) {
+            handleCardiacFilesUpload($cardiacOrderFilesId);
+        } elseif ($cardiacFileId !== null) {
+            if ($cardiacFileAction === 'delete') {
+                handleCardiacFileDelete($cardiacFileId);
+            } else {
+                handleCardiacFileGet($cardiacFileId);
+            }
+        } elseif ($cardiacExaminationOrderId !== null) {
+            handleCardiacExaminationFailure($cardiacExaminationOrderId);
         } elseif ($testingOrderId !== null && $testingAction === 'start') {
             handleTestingOrderStart($testingDepartment, $testingOrderId);
         } elseif ($laboratorySpecimenOrderId !== null) {

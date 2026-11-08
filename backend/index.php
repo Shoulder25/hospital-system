@@ -17,6 +17,8 @@ require_once __DIR__ . '/controllers/nursing.php';
 require_once __DIR__ . '/controllers/doctor.php';
 require_once __DIR__ . '/controllers/emergency.php';
 require_once __DIR__ . '/controllers/testing.php';
+require_once __DIR__ . '/controllers/radiology.php';
+require_once __DIR__ . '/controllers/cardiac.php';
 require_once __DIR__ . '/controllers/billing.php';
 require_once __DIR__ . '/controllers/specialist.php';
 require_once __DIR__ . '/controllers/therapy.php';

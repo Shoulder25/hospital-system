@@ -79,7 +79,7 @@ function testingOrderRows(
         }
         $departmentFilter = ' AND ('
             . implode(' OR ', $validDepartmentConditions) . ')';
-    } elseif ($action !== 'initialize') {
+    } else {
         if (!isset($departments[$scope])) {
             jsonError('Unknown testing department.', [], 404);
         }
@@ -214,6 +214,8 @@ function testingOrderRows(
                 'specimen' => null,
                 'specimens' => [],
                 'results' => [],
+                'cardiac_attempts' => [],
+                'cardiac_files' => [],
             ];
         }
         if ($row['test_result_id'] !== null) {
@@ -269,6 +271,32 @@ function testingOrderRows(
             $orders[$orderId]['specimens'][] = $specimen;
             $orders[$orderId]['specimen'] = $specimen;
         }
+    }
+    if ($scope === 'radiology' && $orders !== []) {
+        $radiologyFiles = radiologyFilesForOrders(
+            $database,
+            array_keys($orders),
+            true
+        );
+        foreach ($radiologyFiles as $orderId => $files) {
+            $orders[$orderId]['radiology_files'] = $files;
+        }
+    }
+    if ($scope === 'cardiac' && $orders !== []) {
+        $attempts = cardiacExaminationAttemptsForOrders(
+            $database,
+            array_keys($orders)
+        );
+        $files = cardiacFilesForOrders(
+            $database,
+            array_keys($orders),
+            true
+        );
+        foreach ($orders as $orderId => &$order) {
+            $order['cardiac_attempts'] = $attempts[$orderId] ?? [];
+            $order['cardiac_files'] = $files[$orderId] ?? [];
+        }
+        unset($order);
     }
 
     return array_values($orders);
@@ -454,7 +482,15 @@ function handleTestingOrderStart(string $department, string $orderId): void
             $database->rollBack();
             jsonError('This test order belongs to another department.', [], 403);
         }
-        if ($order['status'] !== 'ordered') {
+        $restartCardiacAttempt = false;
+        if ($department === 'cardiac' && $order['status'] === 'in_progress') {
+            $latestAttempt = cardiacLatestAttemptForUpdate($database, (int) $orderId);
+            if ($latestAttempt === false || $latestAttempt['status'] !== 'unsuccessful') {
+                $database->rollBack();
+                jsonError('Only a previously unsuccessful ECG examination can be restarted.', [], 409);
+            }
+            $restartCardiacAttempt = true;
+        } elseif ($order['status'] !== 'ordered') {
             $database->rollBack();
             jsonError('Only ordered tests can be started.', [], 409);
         }
@@ -463,15 +499,28 @@ function handleTestingOrderStart(string $department, string $orderId): void
             jsonError('The testing centre desk must route this order before processing.', [], 409);
         }
 
-        $updateStatement = $database->prepare(
-            'UPDATE test_orders
-             SET status = \'in_progress\'
-             WHERE test_order_id = :order_id AND status = \'ordered\''
-        );
-        $updateStatement->execute(['order_id' => (int) $orderId]);
-        if ($updateStatement->rowCount() !== 1) {
-            $database->rollBack();
-            jsonError('This test order is no longer available to start.', [], 409);
+        if (!$restartCardiacAttempt) {
+            $updateStatement = $database->prepare(
+                'UPDATE test_orders
+                 SET status = \'in_progress\'
+                 WHERE test_order_id = :order_id AND status = \'ordered\''
+            );
+            $updateStatement->execute(['order_id' => (int) $orderId]);
+            if ($updateStatement->rowCount() !== 1) {
+                $database->rollBack();
+                jsonError('This test order is no longer available to start.', [], 409);
+            }
+        }
+        if ($department === 'cardiac') {
+            $attemptStatement = $database->prepare(
+                'INSERT INTO cardiac_examination_attempts
+                    (test_order_id, technician_user_id, status)
+                 VALUES (:order_id, :user_id, \'in_progress\')'
+            );
+            $attemptStatement->execute([
+                'order_id' => (int) $orderId,
+                'user_id' => (int) $user['user_id'],
+            ]);
         }
         if ($department === 'laboratory') {
             $specimenStatement = $database->prepare(
@@ -500,7 +549,9 @@ function handleTestingOrderStart(string $department, string $orderId): void
         jsonError('Unable to start processing this test right now.', [], 500);
     }
 
-    jsonSuccess('Test marked in progress.', [
+    jsonSuccess($restartCardiacAttempt
+        ? 'A new ECG examination attempt has started.'
+        : 'Test marked in progress.', [
         'test_order_id' => (int) $orderId,
         'status' => 'in_progress',
     ]);
@@ -750,7 +801,9 @@ function handleTestingResultCreate(string $department): void
     }
     $allowedResultStatuses = $department === 'laboratory'
         ? ['preliminary', 'final', 'amended']
-        : ['final'];
+        : (in_array($department, ['radiology', 'cardiac'], true)
+            ? ['preliminary', 'final']
+            : ['final']);
     if (!is_string($resultStatus)
         || !in_array($resultStatus, $allowedResultStatuses, true)) {
         $errors['result_status'] = 'Choose a result status supported by this department.';
@@ -775,6 +828,14 @@ function handleTestingResultCreate(string $department): void
         } elseif ($order['status'] !== 'in_progress') {
             $database->rollBack();
             jsonError('Start the test before recording its result.', [], 409);
+        }
+        if ($department === 'cardiac') {
+            $latestAttempt = cardiacLatestAttemptForUpdate($database, (int) $orderId);
+            if ($latestAttempt !== false
+                && $latestAttempt['status'] !== 'in_progress') {
+                $database->rollBack();
+                jsonError('Start a new ECG examination attempt before saving its report.', [], 409);
+            }
         }
 
         if ($resultStatus === 'final' || $resultStatus === 'amended') {
@@ -840,6 +901,13 @@ function handleTestingResultCreate(string $department): void
             if ($completeStatement->rowCount() !== 1) {
                 $database->rollBack();
                 jsonError('This test order is no longer in progress.', [], 409);
+            }
+            if ($department === 'cardiac') {
+                cardiacCompleteLatestAttempt(
+                    $database,
+                    (int) $orderId,
+                    (int) $user['user_id']
+                );
             }
             if ($department === 'laboratory') {
                 $completeSpecimen = $database->prepare(

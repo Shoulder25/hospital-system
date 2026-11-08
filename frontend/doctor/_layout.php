@@ -37,7 +37,9 @@ $pageTitle = $pages[$doctorPage][0];
     <link rel="stylesheet" href="../assets/css/auth.css">
     <link rel="stylesheet" href="../assets/css/admin.css">
     <link rel="stylesheet" href="../assets/css/doctor.css">
+    <link rel="stylesheet" href="../assets/css/radiology.css">
     <link rel="stylesheet" href="../assets/css/staff-layout.css">
+    <script src="../assets/js/radiology-image-viewer.js" defer></script>
     <script src="../assets/js/doctor.js?v=<?= (int) filemtime(__DIR__ . '/../assets/js/doctor.js') ?>" defer></script>
     <script src="../assets/js/staff-sidebar.js" defer></script>
 </head>

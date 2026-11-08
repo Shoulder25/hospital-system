@@ -430,7 +430,10 @@ function handleDoctorVisitGet(string $visitId): void
                 tr.result_text, tr.result_notes, tr.status AS result_status, tr.recorded_at,
                 recorder.display_name AS recorded_by
          FROM test_orders t
-         LEFT JOIN test_results tr ON tr.test_order_id = t.test_order_id
+         LEFT JOIN test_results tr
+            ON tr.test_order_id = t.test_order_id
+           AND (t.department NOT IN (\'radiology\', \'cardiac\')
+                OR tr.status = \'final\')
          LEFT JOIN users recorder ON recorder.user_id = tr.recorded_by_user_id
          WHERE t.visit_id = :visit_id
          ORDER BY t.ordered_at, t.test_order_id, tr.recorded_at'
@@ -456,6 +459,43 @@ function handleDoctorVisitGet(string $visitId): void
             ],
         ];
     }, $testStatement->fetchAll());
+    $radiologyOrderIds = [];
+    foreach ($testResults as $testResult) {
+        if ($testResult['department'] === 'radiology'
+            && $testResult['order_status'] === 'completed'
+            && ($testResult['result']['status'] ?? null) === 'final') {
+            $radiologyOrderIds[] = $testResult['test_order_id'];
+        }
+    }
+    $radiologyFiles = radiologyFilesForOrders(
+        $database,
+        array_values(array_unique($radiologyOrderIds))
+    );
+    $cardiacOrderIds = [];
+    foreach ($testResults as $testResult) {
+        if ($testResult['department'] === 'cardiac'
+            && $testResult['order_status'] === 'completed'
+            && ($testResult['result']['status'] ?? null) === 'final') {
+            $cardiacOrderIds[] = $testResult['test_order_id'];
+        }
+    }
+    $cardiacFiles = cardiacFilesForOrders(
+        $database,
+        array_values(array_unique($cardiacOrderIds))
+    );
+    foreach ($testResults as &$testResult) {
+        $testResult['radiology_files'] = $testResult['department'] === 'radiology'
+            && $testResult['order_status'] === 'completed'
+            && ($testResult['result']['status'] ?? null) === 'final'
+            ? ($radiologyFiles[$testResult['test_order_id']] ?? [])
+            : [];
+        $testResult['cardiac_files'] = $testResult['department'] === 'cardiac'
+            && $testResult['order_status'] === 'completed'
+            && ($testResult['result']['status'] ?? null) === 'final'
+            ? ($cardiacFiles[$testResult['test_order_id']] ?? [])
+            : [];
+    }
+    unset($testResult);
 
     $consultationStatement = $database->prepare(
         'SELECT c.consultation_id, c.presenting_complaint,

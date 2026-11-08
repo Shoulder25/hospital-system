@@ -1,0 +1,212 @@
+.radiology-page-actions,
+.radiology-file-actions,
+.radiology-image-viewer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.radiology-gallery,
+.radiology-order-files {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+    gap: 14px;
+}
+
+.radiology-file-card {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    min-width: 0;
+    border: 1px solid #e1eaed;
+    border-radius: 12px;
+    padding: 14px;
+    background: #fff;
+}
+
+.radiology-file-card > strong {
+    overflow-wrap: anywhere;
+    color: #23434e;
+}
+
+.radiology-file-card p {
+    margin: 0;
+    color: #647a83;
+    font-size: .84rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.radiology-file-card .radiology-file-removed {
+    color: #8a5a08;
+}
+
+.radiology-image-preview {
+    display: block;
+    width: 100%;
+    min-height: 140px;
+    overflow: hidden;
+    border: 1px solid #e1eaed;
+    border-radius: 9px;
+    padding: 0;
+    background: #f4f8f9;
+    cursor: zoom-in;
+}
+
+.radiology-image-preview img {
+    display: block;
+    width: 100%;
+    height: 190px;
+    object-fit: contain;
+}
+
+.radiology-file-actions a,
+.doctor-radiology-file-links a {
+    color: #176f68;
+    font-size: .86rem;
+    font-weight: 700;
+}
+
+.radiology-upload-form {
+    display: grid;
+    gap: 12px;
+    border: 1px solid #e1eaed;
+    border-radius: 12px;
+    padding: 16px;
+    background: #fbfdfd;
+}
+
+.radiology-upload-form h3,
+.radiology-upload-form p {
+    margin: 0;
+}
+
+.radiology-upload-form p {
+    color: #647a83;
+    font-size: .88rem;
+}
+
+.radiology-upload-form label {
+    display: grid;
+    gap: 7px;
+    color: #334d57;
+    font-size: .9rem;
+    font-weight: 650;
+}
+
+.radiology-upload-form input[type="file"] {
+    width: 100%;
+    border: 1px solid #d9e3e7;
+    border-radius: 9px;
+    padding: 9px;
+    background: #fff;
+    font: inherit;
+}
+
+.radiology-upload-preview {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+    gap: 10px;
+}
+
+.radiology-upload-preview-item {
+    display: grid;
+    align-content: start;
+    gap: 7px;
+    min-width: 0;
+    color: #526a73;
+    font-size: .78rem;
+    overflow-wrap: anywhere;
+}
+
+.radiology-upload-preview-item img {
+    width: 100%;
+    height: 110px;
+    border: 1px solid #e1eaed;
+    border-radius: 8px;
+    background: #f4f8f9;
+    object-fit: contain;
+}
+
+.radiology-image-viewer {
+    width: min(96vw, 1100px);
+    max-width: 1100px;
+    max-height: 94vh;
+    border: 1px solid #d9e3e7;
+    border-radius: 14px;
+    padding: 16px;
+    color: #263d47;
+    background: #fff;
+}
+
+.radiology-image-viewer::backdrop {
+    background: rgba(12, 31, 39, .78);
+}
+
+.radiology-image-viewer-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.radiology-image-viewer-header strong {
+    overflow-wrap: anywhere;
+}
+
+.radiology-image-viewer-viewport {
+    max-width: 100%;
+    max-height: calc(94vh - 105px);
+    overflow: auto;
+    border-radius: 8px;
+    background: #17252b;
+}
+
+.radiology-image-viewer-image {
+    display: block;
+    margin: 0 auto;
+    max-width: none;
+    height: auto;
+    transform-origin: top left;
+}
+
+.radiology-image-viewer-actions {
+    margin-top: 12px;
+}
+
+.radiology-image-viewer-actions button {
+    border: 1px solid #d9e3e7;
+    border-radius: 8px;
+    padding: 8px 11px;
+    color: #23434e;
+    background: #fff;
+    font: inherit;
+    font-size: .85rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.doctor-radiology-file-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.doctor-radiology-file > .radiology-image-preview {
+    margin-bottom: 10px;
+}
+
+@media (max-width: 600px) {
+    .radiology-image-viewer {
+        width: 100%;
+        max-height: 96vh;
+        margin: auto 0 0;
+        border-radius: 14px 14px 0 0;
+    }
+
+    .radiology-image-viewer-viewport {
+        max-height: calc(96vh - 125px);
+    }
+}

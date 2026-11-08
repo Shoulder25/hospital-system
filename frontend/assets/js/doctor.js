@@ -130,6 +130,20 @@
         }).format(date);
     }
 
+    function radiologyFileUrl(file, download = false) {
+        const url = new URL(`${projectBase}backend/index.php`, window.location.origin);
+        url.searchParams.set('route', `/api/radiology/files/${file.radiology_file_id}`);
+        if (download) url.searchParams.set('download', '1');
+        return url.href;
+    }
+
+    function cardiacFileUrl(file, download = false) {
+        const url = new URL(`${projectBase}backend/index.php`, window.location.origin);
+        url.searchParams.set('route', `/api/cardiac/files/${file.cardiac_file_id}`);
+        if (download) url.searchParams.set('download', '1');
+        return url.href;
+    }
+
     function label(value) {
         return value ? String(value).replaceAll('_', ' ') : '—';
     }
@@ -332,6 +346,66 @@
                 result ? `Recorded: ${formatDateTime(result.recorded_at)}${result.recorded_by ? ` by ${result.recorded_by}` : ''}` : '',
                 item.retest_of_order_id ? `Retest of order #${item.retest_of_order_id}` : '',
             ]);
+            const isCardiac = item.department === 'cardiac';
+            const files = isCardiac
+                ? (item.cardiac_files || [])
+                : (item.radiology_files || []);
+            if (['radiology', 'cardiac'].includes(item.department) && files.length > 0) {
+                const card = target.lastElementChild;
+                const heading = document.createElement('h4');
+                heading.className = 'doctor-radiology-files-heading';
+                heading.textContent = isCardiac
+                    ? 'ECG tracings and supporting files'
+                    : 'Radiology images and supporting files';
+                card.appendChild(heading);
+                const fileList = document.createElement('div');
+                fileList.className = 'doctor-radiology-files';
+                files.forEach((file) => {
+                    const fileCard = document.createElement('article');
+                    fileCard.className = 'doctor-radiology-file';
+                    const fileUrl = isCardiac ? cardiacFileUrl : radiologyFileUrl;
+                    const url = fileUrl(file);
+                    if (file.kind === 'image') {
+                        const openImage = document.createElement('button');
+                        openImage.type = 'button';
+                        openImage.className = 'radiology-image-preview';
+                        openImage.setAttribute('aria-label', `Preview and zoom ${isCardiac ? 'ECG tracing' : 'radiology image'} ${file.name}`);
+                        const image = document.createElement('img');
+                        image.src = url;
+                        image.alt = `${file.name}, ${isCardiac ? 'ECG' : 'X-ray'} order ${item.test_order_id}`;
+                        image.loading = 'lazy';
+                        openImage.addEventListener('click', () => {
+                            window.CareBridgeRadiologyImageViewer.open(
+                                url,
+                                image.alt,
+                                file.name
+                            );
+                        });
+                        openImage.appendChild(image);
+                        fileCard.appendChild(openImage);
+                    }
+                    const name = document.createElement('strong');
+                    name.textContent = file.name;
+                    fileCard.appendChild(name);
+                    const uploaded = document.createElement('small');
+                    uploaded.textContent = `Uploaded ${formatDateTime(file.uploaded_at)} by ${file.uploaded_by || (isCardiac ? 'Cardiac technician' : 'Radiographer')}`;
+                    fileCard.appendChild(uploaded);
+                    const links = document.createElement('div');
+                    links.className = 'doctor-radiology-file-links';
+                    const open = document.createElement('a');
+                    open.href = url;
+                    open.target = '_blank';
+                    open.rel = 'noopener';
+                    open.textContent = file.kind === 'image' ? 'Open image' : 'Open document';
+                    const download = document.createElement('a');
+                    download.href = fileUrl(file, true);
+                    download.textContent = 'Download';
+                    links.append(open, download);
+                    fileCard.appendChild(links);
+                    fileList.appendChild(fileCard);
+                });
+                card.appendChild(fileList);
+            }
         });
     }
 
